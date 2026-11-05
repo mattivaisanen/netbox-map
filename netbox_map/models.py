@@ -35,6 +35,10 @@ from .choices import BaseLayerChoices, ShapeKindChoices
 # Models a map can be assigned to. Its page then shows the map.
 MAP_SCOPE_TYPES = LOCATION_SCOPE_TYPES  # region, site group, site, location
 
+# What a line on a map can be the route of.
+ROUTE_TYPES = models.Q(app_label='dcim', model__in=('cable', 'cablebundle')) | models.Q(app_label='circuits', model='circuit')
+ROUTE_MODELS = (('dcim', 'cable'), ('dcim', 'cablebundle'), ('circuits', 'circuit'))
+
 
 def overlay_upload_to(instance, filename):
     """Overlay images go to MEDIA_ROOT/netbox-map/, under the map's ID."""
@@ -265,9 +269,17 @@ class MapShape(ChangeLoggedModel):
         to=Map, verbose_name=_('opens map'), on_delete=models.SET_NULL, related_name='+', blank=True, null=True,
         help_text=_('Clicking the shape opens this map, such as a building outline opening its floor plan.'),
     )
+    # A line can be the route of a cable, a cable bundle or a circuit.
+    object_type = models.ForeignKey(
+        to='contenttypes.ContentType', on_delete=models.PROTECT, related_name='+',
+        limit_choices_to=ROUTE_TYPES, blank=True, null=True,
+    )
+    object_id = models.PositiveBigIntegerField(blank=True, null=True)
+    object = GenericForeignKey(ct_field='object_type', fk_field='object_id')
 
     class Meta:
         ordering = ('map', 'label', 'pk')
+        indexes = (models.Index(fields=('object_type', 'object_id')),)
         verbose_name = _('shape')
         verbose_name_plural = _('shapes')
 
@@ -300,3 +312,10 @@ class MapShape(ChangeLoggedModel):
             raise ValidationError({'radius': _('Only circles have a radius.')})
         if self.link_id and self.link_id == self.map_id:
             raise ValidationError({'link': _('A shape cannot open the map it is on.')})
+        if bool(self.object_type_id) != bool(self.object_id):
+            raise ValidationError({'object': _('Choose both the type and the object, or neither.')})
+        if self.object_type_id:
+            if self.kind != ShapeKindChoices.LINE:
+                raise ValidationError({'object': _('Only a line can be the route of a cable or circuit.')})
+            if (self.object_type.app_label, self.object_type.model) not in ROUTE_MODELS:
+                raise ValidationError({'object': _('A line can be the route of a cable, cable bundle or circuit.')})

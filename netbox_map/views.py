@@ -218,4 +218,18 @@ class MarkerCardView(View):
         # Same rule as the map itself: no card for an object the user can't see.
         if viewer.marker_data(marker, request.user) is None or marker.object is None:
             raise Http404
-        return render(request, 'netbox_map/inc/hover_card.html', cards.card_context(marker))
+        return render(request, 'netbox_map/inc/hover_card.html',
+                      cards.card_context(marker.object, marker.object_type, request.user))
+
+
+class ShapeCardView(View):
+    """The card of a line drawn as a cable's, cable bundle's or circuit's route."""
+
+    def get(self, request, pk):
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden()
+        shape = get_object_or_404(MapShape.objects.restrict(request.user, 'view'), pk=pk)
+        if viewer.route_object(shape, request.user) is None:
+            raise Http404
+        return render(request, 'netbox_map/inc/hover_card.html',
+                      cards.card_context(shape.object, shape.object_type, request.user))

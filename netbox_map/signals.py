@@ -5,6 +5,7 @@ Markers and map scopes refer to NetBox objects by type and ID, so the
 database doesn't remove them by itself. When such an object is deleted:
 
 - its markers are deleted from every map (change-logged);
+- lines drawn as its route stay, as plain lines;
 - a map assigned to it stays, with no assignment.
 
 Overlay image files are deleted from storage with their overlay, and when
@@ -31,6 +32,10 @@ def object_deleted(sender, instance, **kwargs):
     content_type = ContentType.objects.get_for_model(sender)
     for marker in MapMarker.objects.filter(object_type=content_type, object_id=instance.pk):
         marker.delete()
+    for shape in MapShape.objects.filter(object_type=content_type, object_id=instance.pk):
+        shape.snapshot()
+        shape.object_type, shape.object_id = None, None
+        shape.save()
     if sender._meta.app_label == 'dcim' and sender._meta.model_name in MAP_SCOPE_TYPES:
         for map_ in Map.objects.filter(scope_type=content_type, scope_id=instance.pk):
             map_.snapshot()

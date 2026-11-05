@@ -3,9 +3,9 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from dcim.models import Rack
+from dcim.models import CableBundle, Rack
 
-from ..models import Map, MapMarker
+from ..models import Map, MapMarker, MapShape
 from .utils import make_device, make_map, make_site, make_user
 
 
@@ -109,6 +109,21 @@ class MapViewTests(TestCase):
         self.assertNotContains(response, 'text-bg-green')
         # Labels have no card.
         self.assertEqual(card(label).status_code, 404)
+
+    def test_route_card_and_sidebar_data(self):
+        bundle = CableBundle.objects.create(name='Trunk 7', description='Riser')
+        parent = make_map('Building')
+        map_ = make_map('Floor 2', parent=parent)
+        line = MapShape.objects.create(map=map_, kind='line', points=[[0, 0], [1, 1]], object=bundle)
+        response = self.client.get(reverse('plugins:netbox_map:shape_card', args=[line.pk]))
+        self.assertContains(response, 'Trunk 7')
+        self.assertContains(response, 'Riser')
+        page = self.client.get(map_.get_absolute_url())
+        data = page.context['map_data']
+        self.assertEqual([step['label'] for step in data['place']], ['Building'])
+        self.assertEqual(data['shapes'][0]['object'], f'dcim.cablebundle:{bundle.pk}')
+        self.assertEqual(data['tiles']['layers'][0]['name'], 'Standard')
+        self.assertContains(page, 'id="nbm-sidebar"')
 
     def test_marker_data_for_the_editor(self):
         device = make_device()

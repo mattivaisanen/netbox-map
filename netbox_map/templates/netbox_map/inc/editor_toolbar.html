@@ -17,6 +17,11 @@
       <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="circle">
         <i class="mdi mdi-vector-circle" aria-hidden="true"></i> {% trans "Circle" %}
       </button>
+      {% if map_data.search.cable or map_data.search.cablebundle or map_data.search.circuit %}
+        <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="cable" title="{% trans 'Draw the route of a cable, cable bundle or circuit' %}">
+          <i class="mdi mdi-cable-data" aria-hidden="true"></i> {% trans "Cable" %}
+        </button>
+      {% endif %}
       <button type="button" class="btn btn-sm btn-outline-secondary d-none" data-nbm-undo title="{% trans 'Remove the last point (Backspace)' %}">
         <i class="mdi mdi-undo" aria-hidden="true"></i> {% trans "Undo" %}
       </button>

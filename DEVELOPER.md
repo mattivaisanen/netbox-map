@@ -22,7 +22,7 @@ How the plugin is put together, and why.
 | `models.py` | `Map` (a NetBoxModel) and its change-logged parts `MapOverlay`, `MapMarker` and `MapShape`, with their validation. |
 | `images.py` | Overlay file checks: allowed types, unsafe SVG content, and reading the pixel size. |
 | `viewer.py` | Builds the JSON a map page hands to `map.js`: overlays, markers (with status color and icon), shapes, the user's rights and the API addresses. |
-| `cards.py` | The card shown when the mouse rests on a marker: which fields, and how each value is shown. |
+| `cards.py` | The card shown when the mouse rests on a marker or cable route: which fields, and how each value is shown. |
 | `assets.py`, `assets/` | Leaflet, `map.js` and `map.css`, served by the plugin itself. |
 | `assets/map.js` | Draws a map and runs the editor. |
 | `template_content.py` | **Show on map**, assigned maps on region/site/location pages, the rack's maps on rack pages. |
@@ -103,13 +103,29 @@ out). The page embeds it with `json_script` and calls
   and OpenStreetMap blocks tile requests without one.
 - `?marker=<id>` highlights one marker and zooms to it; **Show on map**
   links use it.
-- **Zoom:** world maps go to level 22. The tile layer's `maxNativeZoom` is
-  `max_zoom`, so Leaflet enlarges the last real tiles beyond it.
+- **Zoom:** world maps go to level 22. Each tile layer's `maxNativeZoom`
+  is its `max_zoom`, so Leaflet enlarges the last real tiles beyond it.
+  World maps use `zoomSnap: 1`: at in-between zoom levels Leaflet stretches
+  the tiles, which blurs them. Image-only maps keep quarter steps.
+- **Background layers:** one Leaflet tile layer per `base_layers` entry,
+  one shown at a time (`setBaseLayer()`). The choice is kept in
+  `localStorage`, like the sidebar's switches; storage errors are ignored.
 - **Start view:** `default_x`, `default_y` and `default_zoom` on the map,
   set together or not at all. The fit button goes back to it.
-- **Place search** (`placeSearch()`): coordinates are parsed in the
-  browser; anything else goes to `geocoder_url` (Nominatim's JSON API) with
-  the same referrer policy as the tiles.
+- **Place search** (`placeSearch()`, editor only): coordinates are parsed
+  in the browser; anything else goes to `geocoder_url` (Nominatim's JSON
+  API) on Enter, with the same referrer policy as the tiles. Nominatim's
+  policy forbids search-as-you-type, so suggestions are the up to five
+  results of that one search.
+
+## Side panel
+
+`buildSidebar()` fills the `<aside>` beside the map on the map's own page
+(embedded maps have none) from the same page data: `place` (parent maps,
+then the scope and its site), `submaps`, the markers and shapes. Every
+drawn layer gets a category (`markerCategory()`, shape kind, `cable` for
+routes, `image`); the **Show** switches add and remove whole categories
+from the map.
 
 ## Turned maps
 
@@ -132,16 +148,28 @@ and get small subclasses:
 `map.getBoundsZoom` is replaced on turned maps so fitting measures all four
 corners of the area, not two.
 
-## Marker cards
+## Cards
 
-`markers/<id>/card/` (`MarkerCardView`) renders
+`markers/<id>/card/` and `shapes/<id>/card/` render
 `inc/hover_card.html` from `cards.card_context()`. It uses NetBox's own
 `card` and `attr-table` classes, so it follows NetBox's theme and any
-theme plugin. `map.js` fetches it after the mouse rests on a marker for
-200 ms, keeps it per marker, and places it beside the marker inside the
-map. A rack's card has an `<img>` of NetBox's own elevation SVG
-(`/api/dcim/racks/<id>/elevation/?render=svg`), so NetBox applies its own
-permissions to it.
+theme plugin. `map.js` fetches it after the mouse rests on a marker or a
+route for 200 ms, keeps it, and places it beside the marker (or the mouse,
+on a line) inside the map. The card stays open while the mouse is on it,
+so its links can be clicked, and closes 300 ms after the mouse leaves.
+
+A rack's card puts an `<img>` of NetBox's own elevation SVG
+(`/api/dcim/racks/<id>/elevation/?render=svg`, so NetBox applies its own
+permissions) beside its details and its devices.
+
+## Cable routes
+
+A route is a `MapShape` line with a generic relation (`object`) limited to
+cables, cable bundles and circuits (`ROUTE_TYPES`). **Cable** in the editor
+draws a line, then `pickRoute()` searches the three types through the REST
+API. A deleted cable leaves its line in place without the relation
+(`signals.object_deleted`). Lines are drawn in the cable's color, or with an
+`nbm-route-<status color>` class whose CSS uses NetBox's color variables.
 
 ## Assets without collectstatic
 

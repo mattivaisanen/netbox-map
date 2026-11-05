@@ -1,33 +1,33 @@
-{% load helpers %}
-{# The card shown when the mouse rests on a marker. Built from NetBox's own card and attribute table classes, so it follows the NetBox theme. #}
-<div class="card mb-0 nbm-card">
+{% load helpers i18n %}
+{# The card shown when the mouse rests on a marker or a route. Built from NetBox's own card and attribute table classes, so it follows the NetBox theme. #}
+<div class="card mb-0 nbm-card{% if elevation_url %} nbm-card-wide{% endif %}">
   <div class="card-header py-2">
     <div>
-      <h5 class="card-title mb-0">{{ name }}</h5>
+      <h5 class="card-title mb-0"><a href="{{ url }}">{{ name }}</a></h5>
       <div class="text-secondary small">{{ type }}</div>
     </div>
   </div>
-  {% if rows %}
-    <table class="table table-sm attr-table mb-0">
-      {% for row in rows %}
-        <tr>
-          <th scope="row">{{ row.label|bettertitle }}</th>
-          <td>
-            {% if row.color %}
-              <span class="badge text-bg-{{ row.color }}">{{ row.text }}</span>
-            {% elif row.text is None or row.text == '' %}
-              {{ ''|placeholder }}
-            {% else %}
-              {{ row.text }}
-            {% endif %}
-          </td>
-        </tr>
-      {% endfor %}
-    </table>
-  {% endif %}
   {% if elevation_url %}
-    <div class="card-body p-2 text-center">
-      <img src="{{ elevation_url }}" class="nbm-elevation" alt="">
+    {# Racks: the elevation on the left; details above the rack's devices on the right. #}
+    <div class="d-flex">
+      <div class="p-2 border-end">
+        <img src="{{ elevation_url }}" class="nbm-elevation" alt="">
+      </div>
+      <div class="flex-fill d-flex flex-column nbm-card-side">
+        {% include 'netbox_map/inc/hover_card_rows.html' %}
+        <div class="border-top flex-fill">
+          <div class="px-3 pt-2 small fw-bold text-secondary">{% trans "Devices" %}</div>
+          <ul class="list-unstyled px-3 py-1 mb-0 nbm-card-devices">
+            {% for device in devices %}
+              <li><a href="{{ device.get_absolute_url }}">{{ device }}</a></li>
+            {% empty %}
+              <li class="text-secondary">{% trans "None" %}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
     </div>
+  {% else %}
+    {% include 'netbox_map/inc/hover_card_rows.html' %}
   {% endif %}
 </div>

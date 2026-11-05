@@ -35,9 +35,11 @@ OBJECT_ICON = 'map-marker'
 
 def tile_settings():
     return {
-        'url': get_plugin_config(PLUGIN, 'tile_url'),
-        'attribution': get_plugin_config(PLUGIN, 'tile_attribution'),
-        'max_zoom': get_plugin_config(PLUGIN, 'max_zoom'),
+        # Each with at least a name and a url; see __init__.py.
+        'layers': [
+            {'max_zoom': 19, 'attribution': '', **layer}
+            for layer in get_plugin_config(PLUGIN, 'base_layers') or [] if layer.get('url')
+        ],
         'geocoder_url': get_plugin_config(PLUGIN, 'geocoder_url'),
     }
 
@@ -86,7 +88,16 @@ def _overlay(overlay):
     }
 
 
-def _shape(shape):
+def route_object(shape, user):
+    """The cable, cable bundle or circuit `shape` is the route of, if the user may see it."""
+    obj = shape.object if shape.object_type_id else None
+    if obj is None or not type(obj).objects.restrict(user, 'view').filter(pk=obj.pk).exists():
+        return None
+    return obj
+
+
+def _shape(shape, user):
+    route = route_object(shape, user)
     return {
         'id': shape.pk,
         'kind': shape.kind,
@@ -96,6 +107,14 @@ def _shape(shape):
         'radius': shape.radius,
         'link_url': shape.link.get_absolute_url() if shape.link_id else None,
         'link_name': shape.link.name if shape.link_id else None,
+        # The route's object: 'app.model:id', its kind and name, and its status
+        # color for drawing the line when the cable has no color of its own.
+        'object': f'{shape.object_type.app_label}.{shape.object_type.model}:{shape.object_id}' if route else None,
+        'route_type': str(shape.object_type.name).title() if route else None,
+        'route_name': str(route) if route else None,
+        'route_url': route.get_absolute_url() if route else None,
+        'route_color': f'#{route.color}' if getattr(route, 'color', '') else None,
+        'status': route.get_status_color() if route is not None and hasattr(route, 'get_status_color') else None,
         'edit_url': reverse('plugins:netbox_map:mapshape_edit', args=[shape.pk]),
     }
 
@@ -105,7 +124,13 @@ SEARCHABLE = {
     'device': ('dcim.device', 'dcim-api:device-list', 'dcim.view_device'),
     'rack': ('dcim.rack', 'dcim-api:rack-list', 'dcim.view_rack'),
     'map': ('netbox_map.map', 'plugins-api:netbox_map-api:map-list', 'netbox_map.view_map'),
+    # What a drawn cable route can be tied to.
+    'cable': ('dcim.cable', 'dcim-api:cable-list', 'dcim.view_cable'),
+    'cablebundle': ('dcim.cablebundle', 'dcim-api:cablebundle-list', 'dcim.view_cablebundle'),
+    'circuit': ('circuits.circuit', 'circuits-api:circuit-list', 'circuits.view_circuit'),
 }
+# Searches limited to the map's region, site or location.
+SCOPED_SEARCHES = ('device', 'rack')
 
 # The REST API filter for objects inside a map's region, site group, site or location.
 SCOPE_FILTERS = {'region': 'region_id', 'sitegroup': 'site_group_id', 'site': 'site_id', 'location': 'location_id'}
@@ -130,10 +155,30 @@ def _search_sources(map_, user):
         if not user.has_perm(permission):
             continue
         url = reverse(viewname)
-        if scope_filter and kind != 'map':
+        if scope_filter and kind in SCOPED_SEARCHES:
             url += f'?{scope_filter}'
         sources[kind] = {'type': object_type, 'url': url}
     return sources
+
+
+def _place(map_):
+    """
+    Where the map is, for the sidebar: its parent maps from the top down,
+    then the region, site or location it is assigned to.
+    """
+    place = []
+    ancestor = map_.parent
+    while ancestor is not None and len(place) < 20:
+        place.insert(0, {'label': ancestor.name, 'url': ancestor.get_absolute_url(), 'kind': 'map'})
+        ancestor = ancestor.parent
+    scope = map_.scope if map_.scope_type_id else None
+    if scope is not None:
+        # A location's site, a site's region: one step up says where it is.
+        site = getattr(scope, 'site', None)
+        if site is not None:
+            place.append({'label': str(site), 'url': site.get_absolute_url(), 'kind': 'site'})
+        place.append({'label': str(scope), 'url': scope.get_absolute_url(), 'kind': map_.scope_type.model})
+    return place
 
 
 def map_data(map_, request, highlight=None):
@@ -150,11 +195,19 @@ def map_data(map_, request, highlight=None):
         'tiles': tile_settings(),
         'overlays': [_overlay(overlay) for overlay in map_.overlays.restrict(user, 'view')],
         'markers': markers,
-        'shapes': [_shape(shape) for shape in map_.shapes.restrict(user, 'view').select_related('link')],
+        'shapes': [
+            _shape(shape, user)
+            for shape in map_.shapes.restrict(user, 'view').select_related('link', 'object_type')
+        ],
         'default_view': (
             {'x': map_.default_x, 'y': map_.default_y, 'zoom': map_.default_zoom} if map_.has_default_view else None
         ),
         'rotation': map_.rotation,
+        'place': _place(map_),
+        'submaps': [
+            {'name': child.name, 'url': child.get_absolute_url()}
+            for child in map_.children.restrict(user, 'view').order_by('name')
+        ],
         'highlight': highlight,
         # The editor's rights and addresses.
         'can': {
@@ -181,6 +234,7 @@ def map_data(map_, request, highlight=None):
         'marker_data_url': reverse('plugins:netbox_map:marker_data', args=[0]),
         # The card shown when the mouse rests on a marker, addressed the same way.
         'marker_card_url': reverse('plugins:netbox_map:marker_card', args=[0]),
+        'shape_card_url': reverse('plugins:netbox_map:shape_card', args=[0]),
         # NetBox's CSRF cookie is HttpOnly, so the editor gets the token here.
         'csrf_token': get_token(request),
     }

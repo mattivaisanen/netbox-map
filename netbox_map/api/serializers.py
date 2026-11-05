@@ -6,7 +6,7 @@ from netbox.api.gfk_fields import GFKSerializerField
 from netbox.api.serializers import ChangeLogMessageSerializer, NetBoxModelSerializer, ValidatedModelSerializer
 
 from ..choices import BaseLayerChoices, ShapeKindChoices
-from ..models import MAP_SCOPE_TYPES, Map, MapMarker, MapOverlay, MapShape
+from ..models import MAP_SCOPE_TYPES, ROUTE_TYPES, Map, MapMarker, MapOverlay, MapShape
 
 
 class MapSerializer(NetBoxModelSerializer):
@@ -65,9 +65,14 @@ class MapShapeSerializer(ChangeLogMessageSerializer, ValidatedModelSerializer):
     map = MapSerializer(nested=True)
     kind = ChoiceField(choices=ShapeKindChoices)
     link = serializers.PrimaryKeyRelatedField(queryset=Map.objects.all(), required=False, allow_null=True)
+    # The cable, cable bundle or circuit a line is the route of.
+    object_type = ContentTypeField(queryset=ObjectType.objects.filter(ROUTE_TYPES), required=False, allow_null=True,
+                                   default=None)
+    object_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    object = GFKSerializerField(read_only=True)
 
     class Meta:
         model = MapShape
-        fields = ('id', 'url', 'display', 'map', 'kind', 'label', 'color', 'points', 'radius', 'link', 'created',
-                  'last_updated')
+        fields = ('id', 'url', 'display', 'map', 'kind', 'label', 'color', 'points', 'radius', 'link', 'object_type',
+                  'object_id', 'object', 'created', 'last_updated')
         brief_fields = ('id', 'url', 'display', 'map', 'kind', 'label')

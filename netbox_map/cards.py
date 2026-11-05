@@ -1,14 +1,18 @@
 """
 The card shown when the mouse rests on a marker: the object's name, its
 type and a few of its fields, laid out like the attribute panels on NetBox's
-own object pages. Which fields show is set per object type with the
-`hover_fields` setting. Racks also show their front elevation.
+own object pages. Lines drawn as a cable's or circuit's route get the
+same card. Which fields show is set per object type with the
+`hover_fields` setting. Racks also show their front elevation and the
+devices in them.
 """
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
+from django.db.models import F
 from django.urls import reverse
 from django.utils.http import urlencode
 
+from dcim.models import Device
 from netbox.plugins import get_plugin_config
 
 PLUGIN = 'netbox_map'
@@ -22,6 +26,9 @@ DEFAULT_HOVER_FIELDS = {
     'dcim.powerpanel': ['site', 'location'],
     'circuits.circuit': ['status', 'provider', 'type'],
     'netbox_map.map': ['base_layer', 'description'],
+    # Lines drawn as routes.
+    'dcim.cable': ['status', 'type', 'a_terminations', 'b_terminations', 'length'],
+    'dcim.cablebundle': ['description'],
 }
 OTHER_FIELDS = ['status', 'description']
 
@@ -80,18 +87,34 @@ def field_row(obj, path):
         row['url'] = value.get_absolute_url() if hasattr(value, 'get_absolute_url') else None
     elif isinstance(value, models.Manager):
         return None
+    elif name == 'length' and value is not None and getattr(owner, 'length_unit', None):
+        # A cable's length with its unit: "12 Meters".
+        row['text'] = f'{value:g} {owner.get_length_unit_display()}'
+    elif isinstance(value, (list, tuple)):
+        # Such as a cable's terminations.
+        row['text'] = ', '.join(_describe(item) for item in value)
     return row
 
 
-def card_context(marker):
-    """What the card template needs for one marker with an object."""
-    obj = marker.object
-    type_label = f'{marker.object_type.app_label}.{marker.object_type.model}'
+def _describe(item):
+    # A cable end reads better with its device: "sw-1 Gi0/1".
+    device = getattr(item, 'device', None)
+    return f'{device} {item}' if device is not None else str(item)
+
+
+def card_context(obj, object_type, user):
+    """What the card template needs for `obj`, a marker's object or a line's route."""
+    type_label = f'{object_type.app_label}.{object_type.model}'
     rows = [row for row in (field_row(obj, path) for path in hover_fields(type_label)) if row is not None]
-    context = {'name': str(obj), 'type': str(marker.object_type.name).title(), 'rows': rows}
-    if type_label == 'dcim.rack' and get_plugin_config(PLUGIN, 'rack_elevation'):
-        context['elevation_url'] = (
-            reverse('dcim-api:rack-elevation', kwargs={'pk': obj.pk})
-            + '?' + urlencode({'face': 'front', 'render': 'svg', **ELEVATION_SIZE})
+    context = {'name': str(obj), 'url': obj.get_absolute_url(), 'type': str(object_type.name).title(), 'rows': rows}
+    if type_label == 'dcim.rack':
+        # Racks: the elevation beside the details, and the devices in the rack.
+        if get_plugin_config(PLUGIN, 'rack_elevation'):
+            context['elevation_url'] = (
+                reverse('dcim-api:rack-elevation', kwargs={'pk': obj.pk})
+                + '?' + urlencode({'face': 'front', 'render': 'svg', **ELEVATION_SIZE})
+            )
+        context['devices'] = Device.objects.restrict(user, 'view').filter(rack=obj).order_by(
+            F('position').desc(nulls_last=True), 'name',
         )
     return context

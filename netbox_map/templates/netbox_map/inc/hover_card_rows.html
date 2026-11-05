@@ -1,0 +1,22 @@
+{% load helpers %}
+{# The details rows of a hover card. #}
+{% if rows %}
+  <table class="table table-sm attr-table mb-0">
+    {% for row in rows %}
+      <tr>
+        <th scope="row">{{ row.label|bettertitle }}</th>
+        <td>
+          {% if row.color %}
+            <span class="badge text-bg-{{ row.color }}">{{ row.text }}</span>
+          {% elif row.text is None or row.text == '' %}
+            {{ ''|placeholder }}
+          {% elif row.url %}
+            <a href="{{ row.url }}">{{ row.text }}</a>
+          {% else %}
+            {{ row.text }}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+{% endif %}

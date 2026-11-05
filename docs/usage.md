@@ -12,15 +12,36 @@ The button under them goes back to the start view.
   status badges), unless the marker has a color of its own. Each shows its
   name below it. Racks are square, links to other maps are diamonds, and
   everything else is round.
-- Rest the mouse on a marker to see a card with the object's details. A
-  rack's card shows its front elevation. Which details show is set in the
+- Rest the mouse on a marker, or on a cable route, to see a card with the
+  object's details. Move the mouse onto the card to click its links. A
+  rack's card shows its front elevation next to its details and the
+  devices in it. Which details show is set in the
   [configuration](configuration.md).
 - Click a marker for a link to its object. A diamond marker, or an area
   that opens a map, takes you to that map.
-- On a world map, the box in the top-right corner jumps to a place: type a
-  city, an address, or a latitude and longitude such as `48.85, 2.35`.
+- Cable routes are thick lines in the cable's color, or its status color
+  when it has none.
 - On a turned map an arrow in the top-right corner points north.
 - **↑ parent** in the card header goes up to the parent map.
+
+### Side panel
+
+The panel on the right of the map (the button in the map's top-right
+corner shows or hides it) has:
+
+- **Location:** the parent maps and the region, site or location the map
+  is assigned to, as links.
+- **Background:** on a world map, the background to show, such as
+  Standard, Simple or Satellite.
+- **Show:** switches to hide devices, racks, map links, labels, cables,
+  areas, lines, circles or images.
+- **Maps:** submaps and the maps this one links to.
+- **Racks**, **Devices** and **Cables and circuits:** what is on the map.
+  Click a name to zoom to it on the map, or the icon next to it to open its
+  page. Long lists get a filter box.
+
+The browser remembers the background, the switches and whether the panel
+is open.
 
 ## Editing a map
 
@@ -35,9 +56,11 @@ it off. Everything is saved as you go.
 | Add any other object | **Add marker**, click the spot, then pick the object in the form. |
 | Draw a line or an area | **Line** or **Area**, click the points, then **Finish** or double-click the last point. **Undo** (or Backspace) removes the last point. |
 | Draw a circle | **Circle**, click the center, then a point on the edge. |
+| Draw a cable route | **Cable**, click the points along the route, **Finish**, then pick the cable, cable bundle or circuit it belongs to. |
+| Jump to a place (world maps) | Type a city, an address, or a latitude and longitude such as `48.85, 2.35` in the box at the top right, then Enter. When several places match, pick one from the list. |
 | Move a shape's points | Click the shape, then **Edit points**. Drag a point to move it, drag a small midpoint to add one, right-click a point to remove it. Click the map when done. |
 | Move or resize a circle | Click it, then **Move or resize**, and drag the middle or the edge. |
-| Label a shape, change its color, or make an area open another map | Click the shape, then **Label, color, link**. |
+| Label a shape, change its color, make it open another map, or change a line's cable | Click the shape, then **Label, color, link**. |
 | Delete a shape | Click it, then **Delete**. |
 | Set where the map opens | Move and zoom the map, then **Set start view**. **Clear start view** goes back to fitting everything. |
 | Turn the map | Type the angle next to the turn icon. 90 puts north on the right. |
@@ -117,6 +140,10 @@ is deleted from NetBox, its markers are removed from every map.
 A shape is a **line**, an **area** or a **circle**, with an optional label
 and a color. Shapes are drawn and reshaped on the map itself; the shape's
 form only changes its label, color, link and (for a circle) radius.
+
+**Route of** (lines only) ties the line to a cable, cable bundle or
+circuit. The line then shows that object's card and colors. When the
+object is deleted from NetBox, the line stays as a plain line.
 
 **Opens map** makes the shape a link: clicking it opens that map, the same
 as a map marker. Use it to make a building outline on a campus map lead to

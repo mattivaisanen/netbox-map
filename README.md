@@ -12,8 +12,9 @@ building to each floor.
 
 Maps are drawn and edited right in NetBox: drag devices into place, draw
 room outlines, and line a floor plan up with the world map below it. Rest
-the mouse on a device or rack to see its details, and turn a map so it
-matches how the building is laid out.
+the mouse on a device, rack or cable to see its details, filter what is
+shown from the side panel, switch between street and satellite views, and
+turn a map so it matches how the building is laid out.
 
 ## What you can put on a map
 
@@ -22,8 +23,10 @@ matches how the building is laid out.
 - **Markers:** any NetBox object at a point: devices, racks, sites,
   locations, power panels, circuits, and other maps. A marker for another
   map opens that map. A marker can also be just a text label.
-- **Shapes:** lines, areas and circles, for room outlines, cable routes or
-  coverage areas. An area can open another map, so clicking a building
+- **Shapes:** lines, areas and circles, for room outlines or coverage
+  areas.
+- **Cable routes:** lines tied to a NetBox cable, cable bundle or circuit,
+  showing where it runs. An area can open another map, so clicking a building
   outline takes you to the building.
 
 The same object can be on several maps, for example on a building overview
@@ -38,9 +41,10 @@ location or site.
 
 - NetBox 4.7 or later. NetBox refuses to load the plugin on older versions.
 - No other plugins, and no Python packages beyond what NetBox installs.
-- For world maps, browsers need to reach a map tile server. OpenStreetMap
-  is the default; a server in your own network can be set instead (see
-  [configuration](docs/configuration.md)). Image-only maps need nothing.
+- For world maps, browsers need to reach map tile servers. The defaults
+  are OpenStreetMap, CARTO and Esri; servers in your own network can be set
+  instead (see [configuration](docs/configuration.md)). Image-only maps
+  need nothing.
 
 ## Installation
 

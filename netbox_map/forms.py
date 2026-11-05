@@ -17,7 +17,7 @@ from utilities.forms.rendering import FieldSet
 
 from . import images
 from .choices import BaseLayerChoices, ShapeKindChoices
-from .models import MAP_SCOPE_TYPES, Map, MapMarker, MapOverlay, MapShape
+from .models import MAP_SCOPE_TYPES, ROUTE_TYPES, Map, MapMarker, MapOverlay, MapShape
 
 
 def scope_types():
@@ -140,16 +140,22 @@ class MapMarkerForm(GenericObjectFormMixin, forms.ModelForm):
         fields = ('map', 'label', 'icon', 'color', 'x', 'y')
 
 
-class MapShapeForm(forms.ModelForm):
+class MapShapeForm(GenericObjectFormMixin, forms.ModelForm):
     """
     A shape's label, color and link. Shapes are drawn and reshaped on the map
     itself, so the form has no points; the radius shows for circles only.
     """
     color = ColorField(label=_('Color'))
     link = DynamicModelChoiceField(queryset=Map.objects.all(), required=False, label=_('Opens map'))
+    object = GenericObjectChoiceField(
+        label=_('Route of'), content_type_queryset=ContentType.objects.filter(ROUTE_TYPES), required=False,
+        selector=True, hx_target_id='shape-object',
+        help_text=_('The cable, cable bundle or circuit this line is the route of.'),
+    )
 
     fieldsets = (
         FieldSet('label', 'color', 'link', 'radius', name=_('Shape')),
+        FieldSet('object', name=_('Route'), html_id='shape-object'),
     )
 
     class Meta:
@@ -163,6 +169,10 @@ class MapShapeForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance.kind != ShapeKindChoices.CIRCLE:
             del self.fields['radius']
+        if self.instance.kind != ShapeKindChoices.LINE:
+            # Only lines are routes: no route field, and no empty Route section.
+            del self.fields['object']
+            self.fieldsets = self.fieldsets[:1]
 
 
 class MapPartFilterForm(NetBoxModelFilterSetForm):

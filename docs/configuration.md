@@ -5,55 +5,93 @@ Settings live under `PLUGINS_CONFIG['netbox_map']` in NetBox's
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `tile_url` | string | `'https://tile.openstreetmap.org/{z}/{x}/{y}.png'` | Address of the world map's tiles, with `{z}`, `{x}` and `{y}` where the zoom level and tile numbers go (`{s}` for a subdomain also works). The browser loads the tiles, so it needs to reach this server. Empty: world maps have no background. |
-| `tile_attribution` | string | OpenStreetMap credit | Credit shown in the corner of world maps. HTML is allowed. Most tile servers require one. |
-| `max_zoom` | integer | `19` | Highest zoom level the tile server offers. World maps zoom in further, to level 22, by enlarging the last tiles. |
-| `geocoder_url` | string | `'https://nominatim.openstreetmap.org/search'` | Address of a [Nominatim](https://nominatim.org)-compatible search, used by the place box on world maps. The browser calls it directly. Empty: the box accepts only coordinates. |
-| `hover_fields` | dict | `{}` | Details on the card shown when the mouse rests on a marker, per object type. See below. |
+| `base_layers` | list | Standard, Simple, Satellite (see below) | Backgrounds of world maps. Users switch between them in the map's side panel. Empty list: world maps have no background. |
+| `geocoder_url` | string | `'https://nominatim.openstreetmap.org/search'` | Address of a [Nominatim](https://nominatim.org)-compatible search, used by the place box in the map editor. The browser calls it directly. Empty: the box accepts only coordinates. |
+| `hover_fields` | dict | `{}` | Details on the card shown when the mouse rests on a marker or a cable route, per object type. See below. |
 | `rack_elevation` | boolean | `True` | Show a rack's front elevation on its card. |
 
 Image-only maps never load tiles.
 
-## Marker cards
+## Background layers
+
+Each entry of `base_layers` is one background:
+
+| Key | Description |
+|---|---|
+| `name` | Shown on the layer's button. |
+| `url` | Tile address, with `{z}`, `{x}` and `{y}` where the zoom level and tile numbers go. `{s}` (subdomain) and `{r}` (`@2x` on high-resolution screens) also work. |
+| `attribution` | Credit shown in the map's corner. HTML is allowed. Most tile servers require one. |
+| `max_zoom` | Highest zoom level the server offers (default 19). Maps zoom in further, to level 22, by enlarging the last tiles. |
+
+Other keys go to Leaflet's
+[tile layer options](https://leafletjs.com/reference.html#tilelayer-option),
+such as `subdomains`.
+
+The defaults are:
+
+| Name | Source | Terms |
+|---|---|---|
+| Standard | OpenStreetMap | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): free for light use. |
+| Simple | CARTO light basemap | [CARTO attribution and terms](https://carto.com/attributions). Free use is limited. |
+| Satellite | Esri World Imagery | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
+
+Check that the terms fit how your organization uses NetBox. To use other
+sources, or only some of these, list them yourself:
+
+```python
+PLUGINS_CONFIG = {
+    'netbox_map': {
+        'base_layers': [
+            {
+                'name': 'Streets',
+                'url': 'https://tiles.example.net/streets/{z}/{x}/{y}.png',
+                'attribution': 'Map data from our own tile server',
+                'max_zoom': 18,
+            },
+            {
+                'name': 'Aerial',
+                'url': 'https://tiles.example.net/aerial/{z}/{x}/{y}.jpg',
+                'attribution': 'Aerial images from our own tile server',
+            },
+        ],
+    },
+}
+```
+
+When the browsers using NetBox can't reach the internet, list only tile
+servers inside the network, and set `geocoder_url` to an internal search
+or to `''`.
+
+OpenStreetMap requires a referrer on tile requests, so tiles are requested
+with NetBox's address (without the page path), although NetBox otherwise
+sends none to other sites. The place search follows OpenStreetMap's
+[Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/):
+it searches once when the user presses Enter, never while typing, and
+lists up to five places to pick from.
+
+## Cards
 
 `hover_fields` maps an object type (`app_label.model`) to the fields its
 card shows, in order. A field can be a field of the object, a path through
 related objects with dots, or `cf.` and a custom field's name. Names the
 object doesn't have are left out. Types not listed keep the built-in
-choice: status, role, device type, primary IP, rack and position for
-devices; status, role, location and height for racks; status and
-description for anything else.
+choice:
+
+| Type | Fields |
+|---|---|
+| Device | status, role, device type, primary IP, rack, position |
+| Rack | status, role, location, height; plus the elevation and the devices in it |
+| Cable | status, type, both ends, length |
+| Circuit | status, provider, type |
+| Anything else | status, description |
 
 ```python
 PLUGINS_CONFIG = {
     'netbox_map': {
         'hover_fields': {
             'dcim.device': ['status', 'device_type.manufacturer', 'device_type', 'primary_ip4', 'serial', 'cf.owner'],
-            'dcim.rack': ['status', 'facility_id', 'u_height'],
+            'dcim.cable': ['status', 'label', 'length', 'tenant'],
         },
     },
 }
 ```
-
-## A tile server in your own network
-
-When the browsers using NetBox can't reach the internet, point `tile_url`
-at a tile server inside the network:
-
-```python
-PLUGINS_CONFIG = {
-    'netbox_map': {
-        'tile_url': 'https://tiles.internal.lan/{z}/{x}/{y}.png',
-        'tile_attribution': 'Map data from our own tile server',
-        'max_zoom': 18,
-    },
-}
-```
-
-OpenStreetMap's public tiles are free for light use under their
-[tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
-The policy requires a referrer, so tile requests send NetBox's address
-(without the page path), although NetBox otherwise sends none to other
-sites. The same goes for OpenStreetMap's public place search under its
-[Nominatim usage policy](https://operations.osmfoundation.org/policies/nominatim/):
-searches are made one at a time, when a user presses Enter.

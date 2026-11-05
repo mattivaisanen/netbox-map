@@ -27,8 +27,16 @@ New:
   OpenStreetMap's tile servers require.
 - Pages to list, add, change and delete all of these, and a REST API under
   `/api/plugins/maps/`.
-- Place search on world maps: a city, an address or a latitude and
-  longitude. Set `geocoder_url` to use another search server.
+- Place search in the editor of world maps: a city, an address or a
+  latitude and longitude, with a list to pick from when several places
+  match. Set `geocoder_url` to use another search server.
+- Background layers for world maps (Standard, Simple and Satellite by
+  default), switched in the side panel and set with `base_layers`.
+- Side panel beside the map: where the map is, the background, switches to
+  hide kinds of things, linked maps, and the racks, devices and cables on
+  the map.
+- Cable routes: lines drawn on the map and tied to a cable, cable bundle
+  or circuit, with that object's card on hover.
 - Maps zoom further in, past the tile server's last level.
 - Start view: a map can open at a saved position and zoom instead of fitted
   to everything.
@@ -38,8 +46,9 @@ New:
   resize circles. **Undo** removes the last point while drawing. The shape
   form keeps only label, color, link and, for circles, radius.
 - Resting the mouse on a marker shows a card with the object's details in
-  NetBox's style. Racks show their elevation. The details are set with
-  `hover_fields`.
+  NetBox's style. Racks show their elevation next to their details and
+  devices. The details are set with `hover_fields`.
+- World maps zoom in whole steps, so map tiles stay sharp.
 - Racks are drawn as squares and map links as diamonds.
 - When an object is deleted from NetBox, its markers leave every map.
 - `prepare_map_uninstall` removes NetBox's rows about maps before the plugin

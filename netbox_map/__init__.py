@@ -21,13 +21,33 @@ class NetBoxMapConfig(PluginConfig):
 
     # See docs/configuration.md.
     default_settings = {
-        # Tiles of the world map. Any server with the usual {z}/{x}/{y}
-        # layout works, including one inside your own network.
-        'tile_url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'tile_attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        # Highest zoom level the tile server offers. The map zooms further
-        # in than that by enlarging the last tiles.
-        'max_zoom': 19,
+        # Background layers of world maps; users switch between them in the
+        # map's sidebar. Any tile server with the usual {z}/{x}/{y} layout
+        # works, including one inside your own network. max_zoom is the
+        # server's highest level: the map zooms further in by enlarging the
+        # last tiles. Other keys are passed to Leaflet's tile layer.
+        'base_layers': [
+            {
+                'name': 'Standard',
+                'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                'max_zoom': 19,
+            },
+            {
+                'name': 'Simple',
+                'url': 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors '
+                               '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+                'max_zoom': 20,
+                'subdomains': 'abcd',
+            },
+            {
+                'name': 'Satellite',
+                'url': 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                'attribution': 'Imagery &copy; Esri, Maxar, Earthstar Geographics and the GIS User Community',
+                'max_zoom': 19,
+            },
+        ],
         # Place search on world maps: a Nominatim-compatible search address.
         # Empty: only coordinates can be searched.
         'geocoder_url': 'https://nominatim.openstreetmap.org/search',

@@ -33,13 +33,21 @@
       {% if editing %}
         {% include 'netbox_map/inc/editor_toolbar.html' %}
       {% endif %}
-      <div id="nbm-map" class="nbm-map"></div>
+      {# The map, and beside it the sidebar that assets/map.js fills in. #}
+      <div class="nbm-layout">
+        <div id="nbm-map" class="nbm-map"></div>
+        <aside id="nbm-sidebar" class="nbm-sidebar border-start" aria-label="{% trans 'Map contents' %}"></aside>
+      </div>
       {{ map_data|json_script:"nbm-map-data" }}
       <script>
         NetBoxMap.render(
           document.getElementById('nbm-map'),
           JSON.parse(document.getElementById('nbm-map-data').textContent),
-          {edit: {{ editing|yesno:"true,false" }}, toolbar: document.getElementById('nbm-toolbar')}
+          {
+            edit: {{ editing|yesno:"true,false" }},
+            toolbar: document.getElementById('nbm-toolbar'),
+            sidebar: document.getElementById('nbm-sidebar')
+          }
         );
       </script>
     </div>

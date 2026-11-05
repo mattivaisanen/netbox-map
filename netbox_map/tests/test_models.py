@@ -3,6 +3,8 @@ from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
+from dcim.models import CableBundle
+
 from ..choices import ShapeKindChoices
 from ..forms import MapShapeForm
 from ..models import Map, MapMarker, MapOverlay, MapShape
@@ -95,6 +97,25 @@ class ShapeTests(TestCase):
         area.link = map_
         with self.assertRaises(ValidationError):
             area.full_clean()
+
+    def test_line_as_route(self):
+        map_ = make_map()
+        bundle = CableBundle.objects.create(name='Trunk 9')
+        line = MapShape(map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [1, 1]], object=bundle)
+        line.full_clean()
+        line.save()
+        # Only lines are routes.
+        area = MapShape(map=map_, kind=ShapeKindChoices.AREA, points=[[0, 0], [1, 0], [1, 1]], object=bundle)
+        with self.assertRaises(ValidationError):
+            area.full_clean()
+        # Not every object can have a route.
+        line.object = map_
+        with self.assertRaises(ValidationError):
+            line.full_clean()
+        # Deleting the bundle keeps the drawn line, without its bundle.
+        bundle.delete()
+        line.refresh_from_db()
+        self.assertIsNone(line.object_id)
 
     def test_form_shows_radius_only_for_circles(self):
         map_ = make_map()
