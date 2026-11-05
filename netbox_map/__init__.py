@@ -25,8 +25,18 @@ class NetBoxMapConfig(PluginConfig):
         # layout works, including one inside your own network.
         'tile_url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         'tile_attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        # Highest zoom level the tile server offers.
+        # Highest zoom level the tile server offers. The map zooms further
+        # in than that by enlarging the last tiles.
         'max_zoom': 19,
+        # Place search on world maps: a Nominatim-compatible search address.
+        # Empty: only coordinates can be searched.
+        'geocoder_url': 'https://nominatim.openstreetmap.org/search',
+        # Fields on the card shown when the mouse rests on a marker, per
+        # object type ('dcim.device': ['status', 'primary_ip', ...]). Types
+        # not named here keep the built-in choice (see cards.py).
+        'hover_fields': {},
+        # Show a rack's front elevation on its card.
+        'rack_elevation': True,
     }
 
     menu = 'navigation.menu'

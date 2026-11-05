@@ -5,16 +5,51 @@
 .nbm-marker { background: none; border: none; }
 .nbm-pin { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%;
   border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); font-size: 16px; line-height: 1; }
-.nbm-pin-link { border-radius: 6px; }
+/* Racks are squares; links to other maps are diamonds. */
+.nbm-pin-square { border-radius: 3px; }
+.nbm-pin-link { border-radius: 4px; transform: rotate(45deg); width: 26px; height: 26px; margin: 2px; }
+.nbm-pin-link i { transform: rotate(-45deg); }
 .nbm-pin-highlight { outline: 3px solid var(--tblr-primary, #00d1b2); outline-offset: 2px; animation: nbm-pulse 1.4s ease-in-out infinite; }
 @keyframes nbm-pulse { 50% { outline-offset: 7px; } }
 .nbm-handle { background: #fff; border: 2px solid var(--tblr-primary, #00d1b2); border-radius: 2px; }
 .nbm-handle-move { border-radius: 50%; }
 .nbm-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .nbm-toolbar .form-range { width: 8rem; }
-.leaflet-tooltip.nbm-label { background: rgba(255, 255, 255, .85); border: none; box-shadow: none; padding: 0 4px;
-  font-size: 11px; font-weight: 600; color: #1d273b; }
+.nbm-rotation { width: 8.5rem; }
+.leaflet-tooltip.nbm-label { background: color-mix(in srgb, var(--tblr-bg-surface, #fff) 85%, transparent); border: none;
+  box-shadow: none; padding: 0 4px; font-size: 11px; font-weight: 600; color: var(--tblr-body-color, #1d273b); }
 .leaflet-tooltip.nbm-label::before { display: none; }
 .nbm-menu { position: absolute; z-index: 1000; width: 16rem; max-height: 22rem; overflow-y: auto; }
 .nbm-menu .list-group-item:disabled { opacity: .55; }
 .leaflet-bar a.nbm-fit { font-size: 18px; line-height: 30px; }
+.nbm-handle-mid { width: 10px !important; height: 10px !important; margin: -5px 0 0 -5px !important; border-radius: 50%; opacity: .8; }
+.nbm-shape-link { cursor: pointer; }
+.nbm-search { width: 16rem; max-width: 50vw; }
+.nbm-search .form-control { box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
+
+/* North arrow on turned maps. */
+.nbm-north { background: var(--tblr-bg-surface, #fff); width: 30px; height: 30px; text-align: center; line-height: 30px; font-size: 18px; }
+.nbm-north i { display: inline-block; }
+
+/* Popups and tooltips in NetBox's colors, so they follow its light and dark themes. */
+.nbm-map .leaflet-popup-content-wrapper, .nbm-map .leaflet-popup-tip,
+.nbm-map .leaflet-tooltip:not(.nbm-label) {
+  background: var(--tblr-bg-surface, #fff); color: var(--tblr-body-color, #1d273b);
+  border: 1px solid var(--tblr-border-color, #dce1e7); box-shadow: var(--tblr-box-shadow-dropdown, 0 4px 12px rgba(0, 0, 0, .15));
+}
+.nbm-map .leaflet-popup-content-wrapper { border-radius: var(--tblr-border-radius, 4px); }
+.nbm-map .leaflet-popup-content { margin: .75rem 1rem; font-size: .875rem; line-height: 1.5; }
+.nbm-map .leaflet-container a.leaflet-popup-close-button, .nbm-map a.leaflet-popup-close-button { color: var(--tblr-secondary, #667382); }
+.nbm-map .leaflet-tooltip-top:not(.nbm-label)::before { border-top-color: var(--tblr-border-color, #dce1e7); }
+
+/* The card shown when the mouse rests on a marker. */
+.nbm-hover { position: absolute; z-index: 1000; display: none; width: 19rem; pointer-events: none;
+  box-shadow: var(--tblr-box-shadow-dropdown, 0 4px 12px rgba(0, 0, 0, .15)); border-radius: var(--tblr-border-radius, 4px);
+  font-size: .875rem; line-height: 1.5; }
+.nbm-hover .attr-table th { width: 40%; font-weight: 600; }
+.nbm-hover .attr-table > :not(caption) > * > * { padding: .3rem .75rem; }
+.nbm-hover .attr-table tr:last-child > * { border-bottom: 0; }
+.nbm-elevation { max-width: 100%; max-height: 22rem; }
+
+/* While a tool is on, clicks pass through drawn shapes to the map, so points can be placed on top of them. */
+.nbm-tool-on .leaflet-pane > svg path.leaflet-interactive { pointer-events: none; }

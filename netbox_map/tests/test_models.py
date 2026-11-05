@@ -4,6 +4,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 from ..choices import ShapeKindChoices
+from ..forms import MapShapeForm
 from ..models import Map, MapMarker, MapOverlay, MapShape
 from .utils import PNG_1PX, make_device, make_map, make_site
 
@@ -28,6 +29,18 @@ class MapTests(TestCase):
         site.delete()
         map_.refresh_from_db()
         self.assertIsNone(map_.scope_id)
+
+
+class MapViewSettingsTests(TestCase):
+    def test_start_view_all_or_none(self):
+        make_map('Whole', default_x=24.9, default_y=60.2, default_zoom=12)
+        with self.assertRaises(ValidationError):
+            make_map('Partial', default_x=24.9)
+
+    def test_rotation_is_limited(self):
+        make_map('Turned', rotation=-45)
+        with self.assertRaises(ValidationError):
+            make_map('Too far', rotation=400)
 
 
 class MarkerTests(TestCase):
@@ -74,6 +87,22 @@ class ShapeTests(TestCase):
         ):
             with self.subTest(kind=kind, points=points), self.assertRaises(ValidationError):
                 MapShape(map=map_, kind=kind, points=points, radius=radius).full_clean()
+
+    def test_link_to_another_map_only(self):
+        map_ = make_map()
+        area = MapShape(map=map_, kind=ShapeKindChoices.AREA, points=[[0, 0], [1, 0], [1, 1]], link=make_map('Floor'))
+        area.full_clean()
+        area.link = map_
+        with self.assertRaises(ValidationError):
+            area.full_clean()
+
+    def test_form_shows_radius_only_for_circles(self):
+        map_ = make_map()
+        area = MapShape.objects.create(map=map_, kind=ShapeKindChoices.AREA, points=[[0, 0], [1, 0], [1, 1]])
+        circle = MapShape.objects.create(map=map_, kind=ShapeKindChoices.CIRCLE, points=[[0, 0]], radius=5)
+        self.assertNotIn('radius', MapShapeForm(instance=area).fields)
+        self.assertIn('radius', MapShapeForm(instance=circle).fields)
+        self.assertNotIn('points', MapShapeForm(instance=area).fields)
 
 
 @override_settings(MEDIA_ROOT='/tmp/netbox-map-tests')

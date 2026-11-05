@@ -1,0 +1,33 @@
+{% load helpers %}
+{# The card shown when the mouse rests on a marker. Built from NetBox's own card and attribute table classes, so it follows the NetBox theme. #}
+<div class="card mb-0 nbm-card">
+  <div class="card-header py-2">
+    <div>
+      <h5 class="card-title mb-0">{{ name }}</h5>
+      <div class="text-secondary small">{{ type }}</div>
+    </div>
+  </div>
+  {% if rows %}
+    <table class="table table-sm attr-table mb-0">
+      {% for row in rows %}
+        <tr>
+          <th scope="row">{{ row.label|bettertitle }}</th>
+          <td>
+            {% if row.color %}
+              <span class="badge text-bg-{{ row.color }}">{{ row.text }}</span>
+            {% elif row.text is None or row.text == '' %}
+              {{ ''|placeholder }}
+            {% else %}
+              {{ row.text }}
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+  {% if elevation_url %}
+    <div class="card-body p-2 text-center">
+      <img src="{{ elevation_url }}" class="nbm-elevation" alt="">
+    </div>
+  {% endif %}
+</div>

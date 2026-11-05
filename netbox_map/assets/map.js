@@ -13,6 +13,9 @@
 (function () {
   'use strict';
 
+  // How far a world map zooms in, beyond the tile server's own levels.
+  var MAX_ZOOM = 22;
+
   function toLatLng(x, y) { return L.latLng(y, x); }
   function fromLatLng(latlng) { return { x: latlng.lng, y: latlng.lat }; }
 
@@ -51,6 +54,7 @@
     var classes = 'nbm-pin';
     if (!marker.color) { classes += ' text-bg-' + (marker.status || 'primary'); }
     if (marker.map_link) { classes += ' nbm-pin-link'; }
+    if (marker.square) { classes += ' nbm-pin-square'; }
     if (highlighted) { classes += ' nbm-pin-highlight'; }
     var style = marker.color ? ' style="background-color:' + marker.color + ';color:#fff"' : '';
     return L.divIcon({
@@ -99,10 +103,65 @@
     layer.on('dragend', function () {
       api('PATCH', data.api.markers + marker.id + '/', fromLatLng(layer.getLatLng())).catch(failed);
     });
+    hoverCard(state, layer, marker);
     state.markers[marker.id] = layer;
     state.bounds.extend(layer.getLatLng());
     if (state.ready) { addLabel(layer); }
     return layer;
+  }
+
+  // The card shown when the mouse rests on a marker with an object. NetBox
+  // renders it (cards.py); it is fetched on the first hover and kept.
+  function hoverCard(state, layer, marker) {
+    if (!marker.object || !state.data.marker_card_url) { return; }
+    var url = state.data.marker_card_url.replace('/0/', '/' + marker.id + '/');
+    var timer = null;
+    layer.on('mouseover', function () {
+      timer = setTimeout(function () { showCard(state, layer, url); }, 200);
+    });
+    layer.on('mouseout click dragstart', function () { clearTimeout(timer); hideCard(state); });
+  }
+
+  function showCard(state, layer, url) {
+    if (!state.card) {
+      state.card = L.DomUtil.create('div', 'nbm-hover', state.map.getContainer());
+      state.map.on('movestart zoomstart', function () { hideCard(state); });
+    }
+    state.cardFor = layer;
+    function fill(html) {
+      if (state.cardFor !== layer || !html) { return; }
+      state.card.innerHTML = html;
+      state.card.style.display = 'block';
+      placeCard(state, layer);
+      // A rack elevation changes the card's height once it has loaded.
+      state.card.querySelectorAll('img').forEach(function (img) {
+        img.addEventListener('load', function () { placeCard(state, layer); });
+      });
+    }
+    if (url in state.cards) {
+      fill(state.cards[url]);
+    } else {
+      fetch(url, { credentials: 'same-origin' })
+        .then(function (response) { return response.ok ? response.text() : ''; })
+        .then(function (html) { state.cards[url] = html; fill(html); });
+    }
+  }
+
+  // Beside the marker, on whichever side has room, and inside the map.
+  function placeCard(state, layer) {
+    var card = state.card;
+    var size = state.map.getSize();
+    var point = state.map.latLngToContainerPoint(layer.getLatLng());
+    var left = point.x + 24;
+    if (left + card.offsetWidth > size.x - 8) { left = point.x - 24 - card.offsetWidth; }
+    var top = Math.min(point.y - 24, size.y - card.offsetHeight - 8);
+    card.style.left = Math.max(8, left) + 'px';
+    card.style.top = Math.max(8, top) + 'px';
+  }
+
+  function hideCard(state) {
+    state.cardFor = null;
+    if (state.card) { state.card.style.display = 'none'; }
   }
 
   function addLabel(layer) {
@@ -110,20 +169,210 @@
   }
 
   // A button under + and − that brings the whole map back into view.
-  function fitButton(fitAll) {
+  function fitButton(fitAll, hasStartView) {
     var Control = L.Control.extend({
       options: { position: 'topleft' },
       onAdd: function () {
         var bar = L.DomUtil.create('div', 'leaflet-bar');
         var button = L.DomUtil.create('a', 'nbm-fit', bar);
         button.href = '#';
-        button.title = 'Show the whole map';
+        var title = hasStartView ? 'Back to the start view' : 'Show the whole map';
+        button.title = title;
         button.setAttribute('role', 'button');
-        button.setAttribute('aria-label', 'Show the whole map');
+        button.setAttribute('aria-label', title);
         button.innerHTML = '<i class="mdi mdi-fit-to-screen-outline"></i>';
         L.DomEvent.disableClickPropagation(button);
         L.DomEvent.on(button, 'click', function (event) { L.DomEvent.preventDefault(event); fitAll(); });
         return bar;
+      },
+    });
+    return new Control();
+  }
+
+  //
+  // Turned maps
+  //
+  // Leaflet always draws north up. A turned map gets a coordinate system
+  // whose pixel space is the normal one rotated around its origin, so
+  // everything Leaflet positions by pixels (markers, shapes, popups, mouse
+  // clicks) lands in the right place without further help. Three things
+  // assume pixels run straight across and are adjusted below: map tiles,
+  // overlay images and circles.
+
+  // Rotates a pixel point clockwise by the angle with sine `sin` and cosine `cos`.
+  function turn(point, sin, cos) {
+    return L.point(point.x * cos - point.y * sin, point.x * sin + point.y * cos);
+  }
+
+  // A copy of `base` (a Leaflet CRS) with its pixel space turned clockwise by `degrees`.
+  function turnedCrs(base, degrees) {
+    var rad = degrees * Math.PI / 180;
+    var sin = Math.sin(rad);
+    var cos = Math.cos(rad);
+    var inner = base.transformation;
+    var transformation = {
+      _transform: function (point, scale) {
+        var p = turn(inner._transform(point, scale), sin, cos);
+        point.x = p.x;
+        point.y = p.y;
+        return point;
+      },
+      transform: function (point, scale) { return this._transform(point.clone(), scale); },
+      untransform: function (point, scale) { return inner.untransform(turn(point, -sin, cos), scale); },
+    };
+    return L.Util.extend({}, base, { transformation: transformation, nbmSin: sin, nbmCos: cos, nbmDegrees: degrees });
+  }
+
+  // Map tiles on a turned map. Leaflet works out which tiles to load and
+  // where to put them in straight pixels; here the visible area is turned
+  // back to straight pixels to pick the tiles, and each tile is placed at
+  // its turned position and turned itself.
+  var TurnedTileLayer = L.TileLayer.extend({
+    _crs: function () { return this._map.options.crs; },
+    _straight: function (point) { var c = this._crs(); return turn(point, -c.nbmSin, c.nbmCos); },
+    _getTiledPixelBounds: function (center) {
+      var b = L.TileLayer.prototype._getTiledPixelBounds.call(this, center);
+      var self = this;
+      return L.bounds([b.min, b.max, b.getTopRight(), b.getBottomLeft()].map(function (p) { return self._straight(p); }));
+    },
+    _resetGrid: function () {
+      L.TileLayer.prototype._resetGrid.call(this);
+      // The world is 2^zoom tiles across in straight pixels.
+      var count = Math.pow(2, this._tileZoom);
+      this._globalTileRange = L.bounds([0, 0], [count - 1, count - 1]);
+      this._wrapX = !this.options.noWrap && [0, count];
+      this._wrapY = false;
+    },
+    _getTilePos: function (coords) {
+      var c = this._crs();
+      return turn(coords.scaleBy(this.getTileSize()), c.nbmSin, c.nbmCos).subtract(this._level.origin);
+    },
+    _addTile: function (coords, container) {
+      L.TileLayer.prototype._addTile.call(this, coords, container);
+      var tile = this._tiles[this._tileCoordsToKey(coords)].el;
+      var size = this.getTileSize();
+      // One pixel larger hides the hairline seams between turned tiles.
+      tile.style.width = (size.x + 1) + 'px';
+      tile.style.height = (size.y + 1) + 'px';
+      tile.style.transformOrigin = '0 0';
+      tile.style.transform += ' rotate(' + this._crs().nbmDegrees + 'deg)';
+    },
+  });
+
+  // An overlay image on a turned map: placed by its top-left corner and
+  // turned with the map. (Leaflet's own only moves and scales.)
+  var TurnedImageOverlay = L.ImageOverlay.extend({
+    _place: function (toPoint) {
+      var b = this._bounds;
+      var nw = toPoint(b.getNorthWest());
+      var ne = toPoint(b.getNorthEast());
+      var sw = toPoint(b.getSouthWest());
+      var image = this._image;
+      image.style.width = nw.distanceTo(ne) + 'px';
+      image.style.height = nw.distanceTo(sw) + 'px';
+      image.style.transformOrigin = '0 0';
+      image.style.transform = 'translate3d(' + nw.x + 'px,' + nw.y + 'px,0) rotate(' +
+        Math.atan2(ne.y - nw.y, ne.x - nw.x) + 'rad)';
+    },
+    _reset: function () {
+      var map = this._map;
+      this._place(function (latlng) { return map.latLngToLayerPoint(latlng); });
+    },
+    _animateZoom: function (e) {
+      var map = this._map;
+      this._place(function (latlng) { return map._latLngToNewLayerPoint(latlng, e.zoom, e.center); });
+    },
+  });
+
+  // A circle keeps its size on a turned map: Leaflet measures the radius
+  // straight across, which shrinks once the map is turned.
+  var TurnedCircle = L.Circle.extend({
+    _project: function () {
+      L.Circle.prototype._project.call(this);
+      var map = this._map;
+      var edge = map.options.crs.distance === L.CRS.Earth.distance
+        ? [this._latlng.lat + (this._mRadius / L.CRS.Earth.R) * 180 / Math.PI, this._latlng.lng]
+        : [this._latlng.lat + this._mRadius, this._latlng.lng];
+      this._radius = this._radiusY = this._point.distanceTo(map.latLngToLayerPoint(edge));
+      this._updateBounds();
+    },
+  });
+
+  // Leaflet sizes a fit from two corners of the area, which on a turned map
+  // isn't the whole area: measure all four instead.
+  function getBoundsZoom(bounds, inside, padding) {
+    bounds = L.latLngBounds(bounds);
+    padding = L.point(padding || [0, 0]);
+    var map = this;
+    var zoom = map.getZoom() || 0;
+    var corners = [bounds.getNorthWest(), bounds.getNorthEast(), bounds.getSouthWest(), bounds.getSouthEast()];
+    var area = L.bounds(corners.map(function (c) { return map.project(c, zoom); })).getSize();
+    var size = map.getSize().subtract(padding);
+    var scale = (inside ? Math.max : Math.min)(size.x / area.x, size.y / area.y);
+    var snap = map.options.zoomSnap;
+    zoom = map.getScaleZoom(scale, zoom);
+    if (snap) {
+      zoom = Math.round(zoom / (snap / 100)) * (snap / 100);
+      zoom = inside ? Math.ceil(zoom / snap) * snap : Math.floor(zoom / snap) * snap;
+    }
+    return Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), zoom));
+  }
+
+  // A small arrow that points north, shown on turned maps.
+  function northArrow(degrees) {
+    var Control = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        var bar = L.DomUtil.create('div', 'leaflet-bar nbm-north');
+        bar.title = 'North';
+        bar.innerHTML = '<i class="mdi mdi-arrow-up-bold" style="transform: rotate(' + degrees + 'deg)"></i>';
+        return bar;
+      },
+    });
+    return new Control();
+  }
+
+  // Place search for world maps: "lat, lon" goes straight there; anything
+  // else (a city, an address) is looked up with the geocoder.
+  var COORDINATES = /^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/;
+
+  function placeSearch(map, geocoderUrl) {
+    var Control = L.Control.extend({
+      options: { position: 'topright' },
+      onAdd: function () {
+        var form = L.DomUtil.create('form', 'nbm-search');
+        form.innerHTML = '<input type="search" class="form-control form-control-sm" ' +
+          'placeholder="' + (geocoderUrl ? 'Place, address or lat, lon' : 'lat, lon') + '" aria-label="Go to">';
+        var input = form.querySelector('input');
+        L.DomEvent.disableClickPropagation(form);
+        L.DomEvent.disableScrollPropagation(form);
+        L.DomEvent.on(form, 'submit', function (event) {
+          L.DomEvent.preventDefault(event);
+          var text = input.value.trim();
+          var match = text.match(COORDINATES);
+          if (match) {
+            map.setView([parseFloat(match[1]), parseFloat(match[2])], 17);
+            return;
+          }
+          if (!text || !geocoderUrl) { return; }
+          var url = geocoderUrl + (geocoderUrl.indexOf('?') < 0 ? '?' : '&') +
+            'format=json&limit=1&q=' + encodeURIComponent(text);
+          input.classList.remove('is-invalid');
+          // Same as the tiles: the geocoder wants to see which site asks.
+          fetch(url, { referrerPolicy: 'strict-origin-when-cross-origin', headers: { 'Accept': 'application/json' } })
+            .then(function (response) { return response.json(); })
+            .then(function (results) {
+              if (!results.length) { input.classList.add('is-invalid'); return; }
+              var box = results[0].boundingbox;  // [south, north, west, east] as strings
+              if (box) {
+                map.fitBounds([[parseFloat(box[0]), parseFloat(box[2])], [parseFloat(box[1]), parseFloat(box[3])]]);
+              } else {
+                map.setView([parseFloat(results[0].lat), parseFloat(results[0].lon)], 17);
+              }
+            })
+            .catch(function () { input.classList.add('is-invalid'); });
+        });
+        return form;
       },
     });
     return new Control();
@@ -137,26 +386,31 @@
     if (data.image_only) {
       mapOptions.crs = L.CRS.Simple;
       mapOptions.minZoom = -6;
-      mapOptions.maxZoom = 6;
+      mapOptions.maxZoom = 8;
     } else {
-      mapOptions.maxZoom = data.tiles.max_zoom;
+      // Past the tile server's last level the last tiles are enlarged.
+      mapOptions.maxZoom = Math.max(MAX_ZOOM, data.tiles.max_zoom);
     }
+    var rotation = ((data.rotation || 0) % 360 + 360) % 360;
+    if (rotation) { mapOptions.crs = turnedCrs(mapOptions.crs || L.CRS.EPSG3857, rotation); }
     var map = L.map(element, mapOptions);
+    if (rotation) { map.getBoundsZoom = getBoundsZoom; }
     if (map.attributionControl) { map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>'); }
     if (!data.image_only && data.tiles.url) {
       // NetBox (Django) tells browsers to send no Referer to other sites, and
       // OpenStreetMap's tile servers refuse requests without one. Send just
       // NetBox's address (no page path) with tile requests.
-      L.tileLayer(data.tiles.url, {
+      new (rotation ? TurnedTileLayer : L.TileLayer)(data.tiles.url, {
         attribution: data.tiles.attribution,
-        maxZoom: data.tiles.max_zoom,
+        maxNativeZoom: data.tiles.max_zoom,
+        maxZoom: mapOptions.maxZoom,
         referrerPolicy: 'strict-origin-when-cross-origin',
       }).addTo(map);
     }
 
     // Everything placed on the map, for fitting the view to it.
     var bounds = L.latLngBounds([]);
-    var state = { map: map, data: data, overlays: {}, markers: {}, tool: null, bounds: bounds };
+    var state = { map: map, data: data, overlays: {}, markers: {}, shapes: {}, cards: {}, tool: null, bounds: bounds };
 
     // Overlays, lowest weight first. On an image-only map an overlay that
     // isn't placed yet sits at its own pixel size from the bottom-left corner.
@@ -164,7 +418,7 @@
       var corners = overlay.bounds;
       if (!corners && data.image_only) { corners = [[0, 0], [overlay.height || 1000, overlay.width || 1000]]; }
       if (!corners) { return; }
-      var layer = L.imageOverlay(overlay.url, corners, {
+      var layer = new (rotation ? TurnedImageOverlay : L.ImageOverlay)(overlay.url, corners, {
         opacity: overlay.opacity / 100, zIndex: overlay.weight, interactive: false,
       }).addTo(map);
       state.overlays[overlay.id] = { data: overlay, layer: layer };
@@ -173,11 +427,11 @@
 
     // Shapes.
     data.shapes.forEach(function (shape) {
-      var style = { color: shape.color, weight: 3, fillOpacity: 0.2 };
+      var style = { color: shape.color, weight: 3, fillOpacity: 0.2, className: shape.link_url ? 'nbm-shape-link' : '' };
       var points = shape.points.map(function (p) { return toLatLng(p[0], p[1]); });
       var layer;
       if (shape.kind === 'circle') {
-        layer = L.circle(points[0], Object.assign({ radius: shape.radius }, style));
+        layer = new (rotation ? TurnedCircle : L.Circle)(points[0], Object.assign({ radius: shape.radius }, style));
       } else if (shape.kind === 'area') {
         layer = L.polygon(points, style);
       } else {
@@ -193,13 +447,22 @@
       } else {
         bounds.extend(layer.getBounds());
       }
-      if (shape.label) { layer.bindTooltip(escapeHtml(shape.label), { sticky: true }); }
+      state.shapes[shape.id] = { data: shape, layer: layer };
+      var tooltip = shape.label || '';
+      if (shape.link_url) { tooltip += (tooltip ? ': ' : '') + 'opens ' + shape.link_name; }
+      if (tooltip) { layer.bindTooltip(escapeHtml(tooltip), { sticky: true }); }
       if (edit && (data.can.change_shape || data.can.delete_shape)) {
         var html = '<strong>' + escapeHtml(shape.label || shape.kind) + '</strong><br>';
         var links = [];
-        if (data.can.change_shape) { links.push('<a href="' + shape.edit_url + '">Edit</a>'); }
+        if (data.can.change_shape) {
+          links.push('<a href="#" data-nbm-reshape="' + shape.id + '">' + (shape.kind === 'circle' ? 'Move or resize' : 'Edit points') + '</a>');
+          links.push('<a href="' + shape.edit_url + '">Label, color, link</a>');
+        }
         if (data.can.delete_shape) { links.push('<a href="#" data-nbm-delete-shape="' + shape.id + '">Delete</a>'); }
         layer.bindPopup(html + links.join(' · '));
+      } else if (shape.link_url) {
+        // A shape linked to another map opens it, like a map marker.
+        layer.on('click', function () { window.location.href = shape.link_url; });
       }
     });
 
@@ -216,14 +479,24 @@
         map.setView([20, 0], 2);
       }
     }
-    fitAll();
+    // The map's own start view when it has one, otherwise everything on it.
+    function startView() {
+      if (data.default_view) {
+        map.setView(toLatLng(data.default_view.x, data.default_view.y), data.default_view.zoom);
+      } else {
+        fitAll();
+      }
+    }
+    startView();
     var focus = data.highlight && state.markers[data.highlight];
-    if (focus && bounds.isValid()) {
-      // Closer in than the whole map, centered on the highlighted marker.
-      var zoom = data.image_only ? map.getZoom() + 1 : Math.max(map.getZoom(), Math.min(17, data.tiles.max_zoom));
+    if (focus) {
+      // Closer in, centered on the highlighted marker.
+      var zoom = data.image_only ? map.getZoom() + 1 : Math.max(map.getZoom(), 17);
       map.setView(focus.getLatLng(), zoom);
     }
-    fitButton(fitAll).addTo(map);
+    fitButton(startView, !!data.default_view).addTo(map);
+    if (!data.image_only) { placeSearch(map, data.tiles.geocoder_url).addTo(map); }
+    if (rotation) { northArrow(rotation).addTo(map); }
 
     // Names under the markers. Added once the view is set: a label that is
     // always shown needs the map's position to draw itself.
@@ -249,8 +522,16 @@
     function say(text) { if (hint) { hint.textContent = text || ''; } }
     function reload() { window.location.reload(); }
 
-    // Delete links in shape popups.
+    // Delete and reshape links in shape popups.
     map.on('popupopen', function (event) {
+      var reshape = event.popup.getElement().querySelector('[data-nbm-reshape]');
+      if (reshape) {
+        reshape.addEventListener('click', function (click) {
+          click.preventDefault();
+          map.closePopup();
+          startReshape(state, state.shapes[reshape.getAttribute('data-nbm-reshape')], say);
+        });
+      }
       var link = event.popup.getElement().querySelector('[data-nbm-delete-shape]');
       if (!link) { return; }
       link.addEventListener('click', function (click) {
@@ -302,6 +583,33 @@
 
     if (!toolbar) { return; }
 
+    // Start view: save what is on screen now, or go back to fitting everything.
+    var setView = toolbar.querySelector('[data-nbm-set-view]');
+    if (setView) {
+      setView.addEventListener('click', function () {
+        var center = fromLatLng(map.getCenter());
+        api('PATCH', data.api.map, { default_x: center.x, default_y: center.y, default_zoom: map.getZoom() })
+          .then(function () { say('The map now opens at this view.'); }, failed);
+      });
+    }
+    var clearView = toolbar.querySelector('[data-nbm-clear-view]');
+    if (clearView) {
+      clearView.addEventListener('click', function () {
+        api('PATCH', data.api.map, { default_x: null, default_y: null, default_zoom: null })
+          .then(function () { say('The map now opens fitted to everything on it.'); }, failed);
+      });
+    }
+
+    // Turning the map: saved, then the page is drawn again with the new angle.
+    var rotation = toolbar.querySelector('[data-nbm-rotation]');
+    if (rotation) {
+      rotation.addEventListener('change', function () {
+        var degrees = parseFloat(rotation.value);
+        if (isNaN(degrees)) { return; }
+        api('PATCH', data.api.map, { rotation: degrees }).then(reload, failed);
+      });
+    }
+
     // Opacity sliders, one per overlay.
     toolbar.querySelectorAll('[data-nbm-opacity]').forEach(function (slider) {
       var id = slider.getAttribute('data-nbm-opacity');
@@ -335,8 +643,9 @@
       if (drawing && drawing.preview) { map.removeLayer(drawing.preview); }
       drawing = null;
       map.getContainer().style.cursor = '';
+      L.DomUtil.removeClass(map.getContainer(), 'nbm-tool-on');
       map.doubleClickZoom.enable();
-      toolbar.querySelectorAll('[data-nbm-finish]').forEach(function (b) { b.classList.add('d-none'); });
+      toolbar.querySelectorAll('[data-nbm-finish], [data-nbm-undo]').forEach(function (b) { b.classList.add('d-none'); });
       say('');
     }
 
@@ -344,6 +653,8 @@
       stopTool();
       state.tool = tool;
       map.getContainer().style.cursor = 'crosshair';
+      // Clicks go to the map, not to shapes already on it (see map.css).
+      L.DomUtil.addClass(map.getContainer(), 'nbm-tool-on');
       say(text + ' Press Esc to cancel.');
     }
 
@@ -369,7 +680,7 @@
         drawing = { kind: kind, points: [], preview: null };
         map.doubleClickZoom.disable();
         if (kind !== 'circle') {
-          toolbar.querySelectorAll('[data-nbm-finish]').forEach(function (b) { b.classList.remove('d-none'); });
+          toolbar.querySelectorAll('[data-nbm-finish], [data-nbm-undo]').forEach(function (b) { b.classList.remove('d-none'); });
         }
       });
     });
@@ -396,6 +707,16 @@
 
     toolbar.querySelectorAll('[data-nbm-finish]').forEach(function (button) {
       button.addEventListener('click', finishDrawing);
+    });
+
+    // Take back the last point while drawing.
+    function undoPoint() {
+      if (!drawing || !drawing.points.length) { return; }
+      drawing.points.pop();
+      redrawPreview();
+    }
+    toolbar.querySelectorAll('[data-nbm-undo]').forEach(function (button) {
+      button.addEventListener('click', undoPoint);
     });
 
     function redrawPreview() {
@@ -437,7 +758,125 @@
 
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && state.tool) { stopTool(); }
+      var typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement && document.activeElement.tagName);
+      if (drawing && !typing && (event.key === 'Backspace' || ((event.ctrlKey || event.metaKey) && event.key === 'z'))) {
+        event.preventDefault();
+        undoPoint();
+      }
     });
+  }
+
+  //
+  // Reshaping a drawn shape: drag its points, drag a midpoint to add one,
+  // right-click a point to remove it. A circle has a center and an edge
+  // handle. Every change is saved when the drag ends.
+  //
+
+  function startReshape(state, shape, say) {
+    var map = state.map;
+    var data = state.data;
+    if (state.reshaping) { state.reshaping(); }
+    var handles = [];
+    var layer = shape.layer;
+    var kind = shape.data.kind;
+
+    function clear() {
+      handles.forEach(function (h) { map.removeLayer(h); });
+      handles = [];
+    }
+    function stop() {
+      clear();
+      state.reshaping = null;
+      map.off('click', stop);
+      say('');
+    }
+    state.reshaping = stop;
+    map.on('click', stop);
+    say(kind === 'circle'
+      ? 'Drag the middle to move the circle, the edge handle to resize it. Click the map when done.'
+      : 'Drag points to move them, a small midpoint to add one, right-click a point to remove it. Click the map when done.');
+
+    function handle(latlng, small) {
+      var h = L.marker(latlng, { draggable: true, icon: handleIcon(small ? 'mid' : 'corner') }).addTo(map);
+      handles.push(h);
+      return h;
+    }
+
+    function save(fields) {
+      api('PATCH', data.api.shapes + shape.data.id + '/', fields).catch(failed);
+    }
+
+    if (kind === 'circle') {
+      var center = handle(layer.getLatLng());
+      var edgeAt = function () {
+        var c = layer.getLatLng();
+        return data.image_only ? L.latLng(c.lat, c.lng + layer.getRadius()) : L.latLng(c.lat, layer.getBounds().getEast());
+      };
+      var edge = handle(edgeAt(), true);
+      center.on('drag', function () { layer.setLatLng(center.getLatLng()); edge.setLatLng(edgeAt()); });
+      center.on('dragend', function () {
+        var c = fromLatLng(layer.getLatLng());
+        save({ points: [[c.x, c.y]] });
+      });
+      edge.on('drag', function () {
+        var c = layer.getLatLng();
+        var e = edge.getLatLng();
+        layer.setRadius(data.image_only ? Math.hypot(e.lat - c.lat, e.lng - c.lng) : map.distance(c, e));
+      });
+      edge.on('dragend', function () { save({ radius: layer.getRadius() }); });
+      return;
+    }
+
+    var closed = kind === 'area';
+    var least = closed ? 3 : 2;
+
+    function latlngs() {
+      var points = layer.getLatLngs();
+      return closed ? points[0] : points;
+    }
+    function apply(points) { layer.setLatLngs(points); }
+    function savePoints() {
+      save({ points: latlngs().map(function (p) { return [p.lng, p.lat]; }) });
+    }
+
+    function build() {
+      clear();
+      var points = latlngs().slice();
+      points.forEach(function (point, i) {
+        var h = handle(point);
+        h.on('drag', function () {
+          var now = latlngs().slice();
+          now[i] = h.getLatLng();
+          apply(now);
+        });
+        h.on('dragend', function () { savePoints(); build(); });
+        h.on('contextmenu', function (event) {
+          L.DomEvent.stop(event);
+          var now = latlngs().slice();
+          if (now.length <= least) { say('A ' + kind + ' needs at least ' + least + ' points.'); return; }
+          now.splice(i, 1);
+          apply(now);
+          savePoints();
+          build();
+        });
+      });
+      // Midpoints: drag one to add a point between two others.
+      var segments = closed ? points.length : points.length - 1;
+      for (var i = 0; i < segments; i++) {
+        (function (i) {
+          var a = points[i];
+          var b = points[(i + 1) % points.length];
+          var mid = handle(L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2), true);
+          mid.on('drag', function () {
+            var now = points.slice();
+            now.splice(i + 1, 0, mid.getLatLng());
+            apply(now);
+          });
+          mid.on('dragend', function () { savePoints(); build(); });
+        })(i);
+      }
+    }
+    build();
   }
 
   //

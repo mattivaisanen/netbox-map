@@ -4,15 +4,22 @@ Everything is under **Maps** in the navigation bar.
 
 ## Viewing a map
 
-A map's page shows the map itself, zoomed to fit everything on it. Drag to
-move around and scroll or use **+**/**−** to zoom. The button under them
-brings the whole map back into view.
+A map's page shows the map itself, at its start view or zoomed to fit
+everything on it. Drag to move around and scroll or use **+**/**−** to zoom.
+The button under them goes back to the start view.
 
 - Markers are colored by their object's status (the same colors as NetBox's
   status badges), unless the marker has a color of its own. Each shows its
-  name below it.
-- Click a marker for a link to its object. A square marker is another map:
-  clicking it opens that map.
+  name below it. Racks are square, links to other maps are diamonds, and
+  everything else is round.
+- Rest the mouse on a marker to see a card with the object's details. A
+  rack's card shows its front elevation. Which details show is set in the
+  [configuration](configuration.md).
+- Click a marker for a link to its object. A diamond marker, or an area
+  that opens a map, takes you to that map.
+- On a world map, the box in the top-right corner jumps to a place: type a
+  city, an address, or a latitude and longitude such as `48.85, 2.35`.
+- On a turned map an arrow in the top-right corner points north.
 - **↑ parent** in the card header goes up to the parent map.
 
 ## Editing a map
@@ -26,9 +33,14 @@ it off. Everything is saved as you go.
 | Move a marker | Drag it. |
 | Put a marker that has no position yet on the map | Click its name under **Not on the map yet**, then click the spot. |
 | Add any other object | **Add marker**, click the spot, then pick the object in the form. |
-| Draw a line or an area | **Line** or **Area**, click the points, then **Finish** or double-click the last point. |
+| Draw a line or an area | **Line** or **Area**, click the points, then **Finish** or double-click the last point. **Undo** (or Backspace) removes the last point. |
 | Draw a circle | **Circle**, click the center, then a point on the edge. |
-| Edit or delete a shape | Click it. |
+| Move a shape's points | Click the shape, then **Edit points**. Drag a point to move it, drag a small midpoint to add one, right-click a point to remove it. Click the map when done. |
+| Move or resize a circle | Click it, then **Move or resize**, and drag the middle or the edge. |
+| Label a shape, change its color, or make an area open another map | Click the shape, then **Label, color, link**. |
+| Delete a shape | Click it, then **Delete**. |
+| Set where the map opens | Move and zoom the map, then **Set start view**. **Clear start view** goes back to fitting everything. |
+| Turn the map | Type the angle next to the turn icon. 90 puts north on the right. |
 | Add an image | **Add image**. On a world map, **Place in view** then puts it in the middle of what you see. |
 | Move or stretch an image | Drag its round middle handle to move it, its square corner handles to stretch it. |
 | Change an image's opacity | The slider next to its name. |
@@ -67,6 +79,12 @@ as a marker.
 **Assigned to** ties the map to a region, site group, site or location.
 If that object is deleted, the map stays and is no longer assigned.
 
+**Rotation** turns the map clockwise by that many degrees, for a building
+or a floor plan that doesn't run north to south. 0 keeps north up.
+
+The **start view** (position and zoom the map opens at) is set from the map
+editor. Without one, the map opens fitted to everything on it.
+
 ## Overlays
 
 An overlay is an image on the map: PNG, JPEG, GIF, WebP or SVG. SVG files
@@ -97,7 +115,14 @@ is deleted from NetBox, its markers are removed from every map.
 ## Shapes
 
 A shape is a **line**, an **area** or a **circle**, with an optional label
-and a color. Its points are a list of `[x, y]` pairs: at least two for a
+and a color. Shapes are drawn and reshaped on the map itself; the shape's
+form only changes its label, color, link and (for a circle) radius.
+
+**Opens map** makes the shape a link: clicking it opens that map, the same
+as a map marker. Use it to make a building outline on a campus map lead to
+the building's own map.
+
+In the REST API, points are a list of `[x, y]` pairs: at least two for a
 line, three for an area, and one (the center) for a circle. A circle's
 radius is in meters on a world map and in pixels on an image-only map.
 

@@ -11,7 +11,9 @@ Maps can contain other maps, so a campus map can lead to a building, and the
 building to each floor.
 
 Maps are drawn and edited right in NetBox: drag devices into place, draw
-room outlines, and line a floor plan up with the world map below it.
+room outlines, and line a floor plan up with the world map below it. Rest
+the mouse on a device or rack to see its details, and turn a map so it
+matches how the building is laid out.
 
 ## What you can put on a map
 
@@ -21,7 +23,8 @@ room outlines, and line a floor plan up with the world map below it.
   locations, power panels, circuits, and other maps. A marker for another
   map opens that map. A marker can also be just a text label.
 - **Shapes:** lines, areas and circles, for room outlines, cable routes or
-  coverage areas.
+  coverage areas. An area can open another map, so clicking a building
+  outline takes you to the building.
 
 The same object can be on several maps, for example on a building overview
 and on its floor plan.

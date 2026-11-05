@@ -17,6 +17,9 @@
       <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="circle">
         <i class="mdi mdi-vector-circle" aria-hidden="true"></i> {% trans "Circle" %}
       </button>
+      <button type="button" class="btn btn-sm btn-outline-secondary d-none" data-nbm-undo title="{% trans 'Remove the last point (Backspace)' %}">
+        <i class="mdi mdi-undo" aria-hidden="true"></i> {% trans "Undo" %}
+      </button>
       <button type="button" class="btn btn-sm btn-success d-none" data-nbm-finish>
         <i class="mdi mdi-check" aria-hidden="true"></i> {% trans "Finish" %}
       </button>
@@ -25,6 +28,22 @@
       <a href="{% url 'plugins:netbox_map:mapoverlay_add' %}?map={{ object.pk }}&return_url={{ object.get_absolute_url }}%3Fedit%3D1" class="btn btn-sm btn-outline-primary">
         <i class="mdi mdi-image-plus" aria-hidden="true"></i> {% trans "Add image" %}
       </a>
+    {% endif %}
+    {% if map_data.can.change_map %}
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-nbm-set-view title="{% trans 'Open the map at what is on screen now' %}">
+        <i class="mdi mdi-crosshairs-gps" aria-hidden="true"></i> {% trans "Set start view" %}
+      </button>
+      {% if map_data.default_view %}
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-nbm-clear-view title="{% trans 'Open the map fitted to everything on it' %}">
+          <i class="mdi mdi-crosshairs-off" aria-hidden="true"></i> {% trans "Clear start view" %}
+        </button>
+      {% endif %}
+      <span class="input-group input-group-sm nbm-rotation" title="{% trans 'Degrees the map is turned clockwise' %}">
+        <span class="input-group-text"><i class="mdi mdi-rotate-right" aria-hidden="true"></i></span>
+        <input type="number" class="form-control" min="-360" max="360" step="1" value="{{ map_data.rotation|floatformat:'-2' }}"
+               data-nbm-rotation aria-label="{% trans 'Rotation' %}">
+        <span class="input-group-text">°</span>
+      </span>
     {% endif %}
     <span class="text-secondary small" data-nbm-hint>{% trans "Right-click the map to add a device, rack, map link or label. Drag markers to move them. Drag an image's corners to stretch it, its middle to move it." %}</span>
   </div>

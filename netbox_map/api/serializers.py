@@ -23,7 +23,8 @@ class MapSerializer(NetBoxModelSerializer):
         model = Map
         fields = (
             'id', 'url', 'display_url', 'display', 'name', 'parent', 'base_layer', 'scope_type', 'scope_id', 'scope',
-            'description', 'comments', 'tags', 'custom_fields', 'created', 'last_updated',
+            'default_x', 'default_y', 'default_zoom', 'rotation', 'description', 'comments', 'tags', 'custom_fields', 'created',
+            'last_updated',
         )
         brief_fields = ('id', 'url', 'display', 'name', 'description')
 
@@ -63,9 +64,10 @@ class MapShapeSerializer(ChangeLogMessageSerializer, ValidatedModelSerializer):
     """A line, area or circle drawn on a map."""
     map = MapSerializer(nested=True)
     kind = ChoiceField(choices=ShapeKindChoices)
+    link = serializers.PrimaryKeyRelatedField(queryset=Map.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = MapShape
-        fields = ('id', 'url', 'display', 'map', 'kind', 'label', 'color', 'points', 'radius', 'created',
+        fields = ('id', 'url', 'display', 'map', 'kind', 'label', 'color', 'points', 'radius', 'link', 'created',
                   'last_updated')
         brief_fields = ('id', 'url', 'display', 'map', 'kind', 'label')

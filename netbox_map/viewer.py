@@ -38,6 +38,7 @@ def tile_settings():
         'url': get_plugin_config(PLUGIN, 'tile_url'),
         'attribution': get_plugin_config(PLUGIN, 'tile_attribution'),
         'max_zoom': get_plugin_config(PLUGIN, 'max_zoom'),
+        'geocoder_url': get_plugin_config(PLUGIN, 'geocoder_url'),
     }
 
 
@@ -62,6 +63,8 @@ def _marker(marker, user):
         'type': str(marker.object_type.name).title() if marker.object_type_id else '',
         'url': obj.get_absolute_url() if obj is not None and hasattr(obj, 'get_absolute_url') else None,
         'map_link': marker.is_map_link,
+        # Racks are drawn as squares, everything else as round pins.
+        'square': type_label == 'dcim.rack',
         'icon': marker.icon or DEFAULT_ICONS.get(type_label, OBJECT_ICON if obj is not None else LABEL_ICON),
         'color': f'#{marker.color}' if marker.color else None,
         'status': status_color or ('secondary' if obj is not None else None),
@@ -91,6 +94,8 @@ def _shape(shape):
         'color': f'#{shape.color}',
         'points': shape.points,
         'radius': shape.radius,
+        'link_url': shape.link.get_absolute_url() if shape.link_id else None,
+        'link_name': shape.link.name if shape.link_id else None,
         'edit_url': reverse('plugins:netbox_map:mapshape_edit', args=[shape.pk]),
     }
 
@@ -145,7 +150,11 @@ def map_data(map_, request, highlight=None):
         'tiles': tile_settings(),
         'overlays': [_overlay(overlay) for overlay in map_.overlays.restrict(user, 'view')],
         'markers': markers,
-        'shapes': [_shape(shape) for shape in map_.shapes.restrict(user, 'view')],
+        'shapes': [_shape(shape) for shape in map_.shapes.restrict(user, 'view').select_related('link')],
+        'default_view': (
+            {'x': map_.default_x, 'y': map_.default_y, 'zoom': map_.default_zoom} if map_.has_default_view else None
+        ),
+        'rotation': map_.rotation,
         'highlight': highlight,
         # The editor's rights and addresses.
         'can': {
@@ -154,13 +163,14 @@ def map_data(map_, request, highlight=None):
                 ('add_marker', 'add', 'mapmarker'), ('change_marker', 'change', 'mapmarker'),
                 ('add_shape', 'add', 'mapshape'), ('change_shape', 'change', 'mapshape'),
                 ('delete_shape', 'delete', 'mapshape'), ('add_overlay', 'add', 'mapoverlay'),
-                ('change_overlay', 'change', 'mapoverlay'),
+                ('change_overlay', 'change', 'mapoverlay'), ('change_map', 'change', 'map'),
             )
         },
         'api': {
             'markers': reverse('plugins-api:netbox_map-api:mapmarker-list'),
             'shapes': reverse('plugins-api:netbox_map-api:mapshape-list'),
             'overlays': reverse('plugins-api:netbox_map-api:mapoverlay-list'),
+            'map': reverse('plugins-api:netbox_map-api:map-detail', args=[map_.pk]),
         },
         'add_marker_url': reverse('plugins:netbox_map:mapmarker_add') + '?' + urlencode(
             {'map': map_.pk, 'return_url': return_url}
@@ -169,6 +179,8 @@ def map_data(map_, request, highlight=None):
         'search': _search_sources(map_, user),
         # The address of one marker's data; map.js puts the marker's ID in place of the 0.
         'marker_data_url': reverse('plugins:netbox_map:marker_data', args=[0]),
+        # The card shown when the mouse rests on a marker, addressed the same way.
+        'marker_card_url': reverse('plugins:netbox_map:marker_card', args=[0]),
         # NetBox's CSRF cookie is HttpOnly, so the editor gets the token here.
         'csrf_token': get_token(request),
     }

@@ -72,12 +72,13 @@ class MapShapeTable(NetBoxTable):
     map = tables.Column(linkify=True, verbose_name=_('Map'))
     kind = columns.ChoiceFieldColumn(verbose_name=_('Kind'))
     color = columns.ColorColumn(verbose_name=_('Color'))
+    link = tables.Column(linkify=True, verbose_name=_('Opens map'))
     actions = columns.ActionsColumn(actions=('edit', 'delete'))
 
     class Meta(NetBoxTable.Meta):
         model = MapShape
-        fields = ('pk', 'id', 'shape', 'map', 'kind', 'label', 'color', 'radius', 'created', 'last_updated')
-        default_columns = ('pk', 'shape', 'map', 'kind', 'color')
+        fields = ('pk', 'id', 'shape', 'map', 'kind', 'label', 'color', 'link', 'radius', 'created', 'last_updated')
+        default_columns = ('pk', 'shape', 'map', 'kind', 'color', 'link')
 
     def render_shape(self, record):
         return str(record)

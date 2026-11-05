@@ -34,7 +34,7 @@ menu = PluginMenu(
         (_('Map Contents'), (
             _item('mapmarker', _('Markers')),
             _item('mapoverlay', _('Overlays')),
-            _item('mapshape', _('Shapes')),
+            _item('mapshape', _('Shapes'), add=False),  # drawn on the map
         )),
     ),
 )

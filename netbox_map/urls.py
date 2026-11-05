@@ -8,6 +8,7 @@ from . import views  # Also registers the views get_model_urls() finds
 urlpatterns = [
     path('assets/<str:name>', assets.asset, name='asset'),
     path('markers/<int:pk>/data/', views.MarkerDataView.as_view(), name='marker_data'),
+    path('markers/<int:pk>/card/', views.MarkerCardView.as_view(), name='marker_card'),
     path('', include(get_model_urls('netbox_map', 'map', detail=False))),
     path('<int:pk>/', include(get_model_urls('netbox_map', 'map'))),
     path('markers/', include(get_model_urls('netbox_map', 'mapmarker', detail=False))),

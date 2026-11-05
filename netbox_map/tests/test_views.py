@@ -21,7 +21,7 @@ class PageTests(TestCase):
         for name, args in (
             ('map_list', []), ('map', [map_.pk]), ('map_add', []), ('map_edit', [map_.pk]),
             ('mapmarker_list', []), ('mapmarker_add', []), ('mapoverlay_list', []), ('mapoverlay_add', []),
-            ('mapshape_list', []), ('mapshape_add', []),
+            ('mapshape_list', []),
         ):
             with self.subTest(page=name):
                 response = self.client.get(reverse(f'plugins:netbox_map:{name}', args=args))
@@ -83,6 +83,32 @@ class MapViewTests(TestCase):
         site = make_site('Site C')
         make_map('Site C plan', scope_type=ContentType.objects.get_for_model(site), scope_id=site.pk)
         self.assertContains(self.client.get(site.get_absolute_url()), 'Site C plan')
+
+    def test_hover_card(self):
+        device = make_device()
+        rack = Rack.objects.create(name='R9', site=device.site)
+        map_ = make_map()
+        device_marker = MapMarker.objects.create(map=map_, object=device, x=1, y=2)
+        rack_marker = MapMarker.objects.create(map=map_, object=rack, x=3, y=4)
+        label = MapMarker.objects.create(map=map_, label='Door', x=5, y=6)
+        card = lambda marker: self.client.get(reverse('plugins:netbox_map:marker_card', args=[marker.pk]))
+        # Built-in fields: status as a badge, related objects by name.
+        response = card(device_marker)
+        self.assertContains(response, 'text-bg-green')
+        self.assertContains(response, 'Box')
+        self.assertNotContains(response, 'nbm-elevation')
+        # Racks show their elevation and are drawn square.
+        self.assertContains(card(rack_marker), 'nbm-elevation')
+        self.assertTrue(self.client.get(reverse('plugins:netbox_map:marker_data', args=[rack_marker.pk])).json()['square'])
+        # Configured fields; a name the object doesn't have is left out.
+        config = {'netbox_map': {'hover_fields': {'dcim.device': ['serial', 'device_type.manufacturer', 'nonsense']}}}
+        with self.settings(PLUGINS_CONFIG=config):
+            response = card(device_marker)
+        self.assertContains(response, 'Maker')
+        self.assertNotContains(response, 'Nonsense')
+        self.assertNotContains(response, 'text-bg-green')
+        # Labels have no card.
+        self.assertEqual(card(label).status_code, 404)
 
     def test_marker_data_for_the_editor(self):
         device = make_device()

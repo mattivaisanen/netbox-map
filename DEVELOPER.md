@@ -22,6 +22,7 @@ How the plugin is put together, and why.
 | `models.py` | `Map` (a NetBoxModel) and its change-logged parts `MapOverlay`, `MapMarker` and `MapShape`, with their validation. |
 | `images.py` | Overlay file checks: allowed types, unsafe SVG content, and reading the pixel size. |
 | `viewer.py` | Builds the JSON a map page hands to `map.js`: overlays, markers (with status color and icon), shapes, the user's rights and the API addresses. |
+| `cards.py` | The card shown when the mouse rests on a marker: which fields, and how each value is shown. |
 | `assets.py`, `assets/` | Leaflet, `map.js` and `map.css`, served by the plugin itself. |
 | `assets/map.js` | Draws a map and runs the editor. |
 | `template_content.py` | **Show on map**, assigned maps on region/site/location pages, the rack's maps on rack pages. |
@@ -102,6 +103,45 @@ out). The page embeds it with `json_script` and calls
   and OpenStreetMap blocks tile requests without one.
 - `?marker=<id>` highlights one marker and zooms to it; **Show on map**
   links use it.
+- **Zoom:** world maps go to level 22. The tile layer's `maxNativeZoom` is
+  `max_zoom`, so Leaflet enlarges the last real tiles beyond it.
+- **Start view:** `default_x`, `default_y` and `default_zoom` on the map,
+  set together or not at all. The fit button goes back to it.
+- **Place search** (`placeSearch()`): coordinates are parsed in the
+  browser; anything else goes to `geocoder_url` (Nominatim's JSON API) with
+  the same referrer policy as the tiles.
+
+## Turned maps
+
+Leaflet always draws north up, and the usual rotation add-ons patch
+Leaflet's map internals. Instead, `turnedCrs()` wraps the CRS (EPSG:3857
+or `CRS.Simple`) so its pixel space is the normal one rotated around the
+origin. Markers, shapes, popups, dragging and clicks all go through the
+CRS and need nothing more. Three things assume pixels run straight across
+and get small subclasses:
+
+- `TurnedTileLayer`: the visible area is turned back to pick tiles, each
+  tile is placed at its turned corner and rotated with CSS. Tiles are
+  drawn one pixel larger to hide seams. The tile grid is fixed at
+  `2^zoom` tiles across, with the usual wrapping in longitude.
+- `TurnedImageOverlay`: placed by its top-left corner with a CSS
+  translate and rotate, during zoom animation too.
+- `TurnedCircle`: Leaflet measures the radius along the x axis, which
+  shrinks once turned; it is measured as a distance instead.
+
+`map.getBoundsZoom` is replaced on turned maps so fitting measures all four
+corners of the area, not two.
+
+## Marker cards
+
+`markers/<id>/card/` (`MarkerCardView`) renders
+`inc/hover_card.html` from `cards.card_context()`. It uses NetBox's own
+`card` and `attr-table` classes, so it follows NetBox's theme and any
+theme plugin. `map.js` fetches it after the mouse rests on a marker for
+200 ms, keeps it per marker, and places it beside the marker inside the
+map. A rack's card has an `<img>` of NetBox's own elevation SVG
+(`/api/dcim/racks/<id>/elevation/?render=svg`), so NetBox applies its own
+permissions to it.
 
 ## Assets without collectstatic
 
@@ -123,7 +163,13 @@ CSRF cookie is HttpOnly, so the token comes in the page data.
   drag end.
 - Drawing collects clicks and sends a `POST` to `shapes/` when finished,
   then reloads the page. A double-click adds its point twice; repeats are
-  dropped.
+  dropped. While a tool is on, the map gets `nbm-tool-on`, which lets
+  clicks pass through existing shapes (their popups would stop the click).
+- **Reshaping** (`startReshape()`): a handle per point, a smaller one per
+  segment middle that adds a point when dragged, right-click to remove a
+  point. Each change is a `PATCH` of `points` (or `radius`).
+- Shapes have no add form: they are drawn on the map. Their edit form has
+  no points field, and shows the radius only for circles.
 - **Right-click menu** (`startContextMenu()`): devices, racks and maps are
   searched through NetBox's REST API (`viewer.SEARCHABLE`, limited to the
   map's scope with the matching `*_id` filter), labels are typed in place.

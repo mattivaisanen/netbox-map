@@ -4,7 +4,7 @@
 <div class="card">
   <h2 class="card-header">
     {{ panel.heading }}
-    {% if panel.add_permission in perms %}
+    {% if panel.add_url and panel.add_permission in perms %}
       <div class="card-actions">
         <a href="{% url panel.add_url %}?{{ panel.add_field }}={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-ghost-primary btn-sm">
           <i class="mdi mdi-plus-thick" aria-hidden="true"></i> {% trans "Add" %}

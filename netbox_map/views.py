@@ -1,5 +1,5 @@
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.http import Http404, HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import View
 
@@ -7,7 +7,7 @@ from netbox.object_actions import AddObject, BulkDelete, BulkExport
 from netbox.views import generic
 from utilities.views import register_model_view
 
-from . import filtersets, forms, tables, viewer
+from . import cards, filtersets, forms, tables, viewer
 from .models import Map, MapMarker, MapOverlay, MapShape
 
 
@@ -47,7 +47,8 @@ class MapView(generic.ObjectView):
             panels.append({
                 'heading': heading,
                 'table': table,
-                'add_url': f'plugins:netbox_map:{opts.model_name}_add',
+                # Shapes are drawn on the map, not added from a form.
+                'add_url': None if model is MapShape else f'plugins:netbox_map:{opts.model_name}_add',
                 'add_permission': f'{opts.app_label}.add_{opts.model_name}',
                 'add_field': field,
             })
@@ -161,16 +162,16 @@ class MapMarkerBulkDeleteView(generic.BulkDeleteView):
     table = tables.MapMarkerTable
 
 
+# Shapes are drawn on the map, so there is no add form.
 @register_model_view(MapShape, 'list', path='', detail=False)
 class MapShapeListView(generic.ObjectListView):
     queryset = MapShape.objects.select_related('map')
     filterset = filtersets.MapShapeFilterSet
     filterset_form = forms.MapShapeFilterForm
     table = tables.MapShapeTable
-    actions = PART_ACTIONS
+    actions = (BulkExport, BulkDelete)
 
 
-@register_model_view(MapShape, 'add', detail=False)
 @register_model_view(MapShape, 'edit')
 class MapShapeEditView(generic.ObjectEditView):
     queryset = MapShape.objects.all()
@@ -203,3 +204,18 @@ class MarkerDataView(View):
         if data is None:
             return JsonResponse({'detail': 'Not found.'}, status=404)
         return JsonResponse(data)
+
+
+#
+# The card shown when the mouse rests on a marker (see cards.py).
+#
+
+class MarkerCardView(View):
+    def get(self, request, pk):
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden()
+        marker = get_object_or_404(MapMarker.objects.restrict(request.user, 'view'), pk=pk)
+        # Same rule as the map itself: no card for an object the user can't see.
+        if viewer.marker_data(marker, request.user) is None or marker.object is None:
+            raise Http404
+        return render(request, 'netbox_map/inc/hover_card.html', cards.card_context(marker))

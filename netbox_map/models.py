@@ -65,8 +65,17 @@ class Map(NetBoxModel):
     scope = GenericForeignKey(ct_field='scope_type', fk_field='scope_id')
     description = models.CharField(verbose_name=_('description'), max_length=200, blank=True)
     comments = models.TextField(verbose_name=_('comments'), blank=True)
+    # Where the map opens. Empty: zoomed to fit everything on it.
+    default_x = models.FloatField(verbose_name=_('default x'), blank=True, null=True)
+    default_y = models.FloatField(verbose_name=_('default y'), blank=True, null=True)
+    default_zoom = models.FloatField(verbose_name=_('default zoom'), blank=True, null=True)
+    rotation = models.FloatField(
+        verbose_name=_('rotation'), default=0,
+        validators=(MinValueValidator(-360), MaxValueValidator(360)),
+        help_text=_('Degrees the map is turned clockwise. 0 keeps north up, 90 puts north on the right.'),
+    )
 
-    clone_fields = ('parent', 'base_layer', 'scope_type', 'scope_id')
+    clone_fields = ('parent', 'base_layer', 'scope_type', 'scope_id', 'rotation')
 
     class Meta:
         ordering = ('name',)
@@ -92,6 +101,13 @@ class Map(NetBoxModel):
             raise ValidationError({'scope': _('A map can be assigned to a region, site group, site or location.')})
         if bool(self.scope_type_id) != bool(self.scope_id):
             raise ValidationError({'scope': _('Choose both the type and the object, or neither.')})
+        view = (self.default_x, self.default_y, self.default_zoom)
+        if any(value is not None for value in view) and None in view:
+            raise ValidationError(_('Give the default position and zoom together, or none of them.'))
+
+    @property
+    def has_default_view(self):
+        return None not in (self.default_x, self.default_y, self.default_zoom)
 
 
 class MapOverlay(ChangeLoggedModel):
@@ -245,6 +261,10 @@ class MapShape(ChangeLoggedModel):
     color = ColorField(verbose_name=_('color'), default='2196f3')
     points = models.JSONField(verbose_name=_('points'), default=list, help_text=_('A list of [x, y] pairs.'))
     radius = models.FloatField(verbose_name=_('radius'), blank=True, null=True)
+    link = models.ForeignKey(
+        to=Map, verbose_name=_('opens map'), on_delete=models.SET_NULL, related_name='+', blank=True, null=True,
+        help_text=_('Clicking the shape opens this map, such as a building outline opening its floor plan.'),
+    )
 
     class Meta:
         ordering = ('map', 'label', 'pk')
@@ -278,3 +298,5 @@ class MapShape(ChangeLoggedModel):
                 raise ValidationError({'radius': _('A circle needs a radius above zero.')})
         elif self.radius is not None:
             raise ValidationError({'radius': _('Only circles have a radius.')})
+        if self.link_id and self.link_id == self.map_id:
+            raise ValidationError({'link': _('A shape cannot open the map it is on.')})

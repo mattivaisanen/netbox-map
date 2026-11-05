@@ -35,7 +35,19 @@ def marker_types():
 # Maps
 #
 
-class MapForm(GenericObjectFormMixin, NetBoxModelForm):
+class RotationMixin:
+    """Rotation may be left empty (or out of a CSV file): it then means north up."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'rotation' in self.fields:
+            self.fields['rotation'].required = False
+
+    def clean_rotation(self):
+        return self.cleaned_data.get('rotation') or 0
+
+
+class MapForm(RotationMixin, GenericObjectFormMixin, NetBoxModelForm):
     parent = DynamicModelChoiceField(queryset=Map.objects.all(), required=False, label=_('Parent'))
     scope = GenericObjectChoiceField(
         label=_('Assigned to'), content_type_queryset=scope_types(), required=False, selector=True,
@@ -45,16 +57,16 @@ class MapForm(GenericObjectFormMixin, NetBoxModelForm):
     comments = CommentField()
 
     fieldsets = (
-        FieldSet('name', 'parent', 'base_layer', 'description', 'tags', name=_('Map')),
+        FieldSet('name', 'parent', 'base_layer', 'rotation', 'description', 'tags', name=_('Map')),
         FieldSet('scope', name=_('Assignment'), html_id='scope'),
     )
 
     class Meta:
         model = Map
-        fields = ('name', 'parent', 'base_layer', 'description', 'comments', 'tags')
+        fields = ('name', 'parent', 'base_layer', 'rotation', 'description', 'comments', 'tags')
 
 
-class MapImportForm(ScopedImportForm, NetBoxModelImportForm):
+class MapImportForm(RotationMixin, ScopedImportForm, NetBoxModelImportForm):
     parent = CSVModelChoiceField(
         queryset=Map.objects.all(), to_field_name='name', required=False, label=_('Parent'),
         help_text=_('Name of the parent map'),
@@ -63,7 +75,7 @@ class MapImportForm(ScopedImportForm, NetBoxModelImportForm):
 
     class Meta:
         model = Map
-        fields = ('name', 'parent', 'base_layer', 'scope_type', 'scope_id', 'description', 'comments', 'tags')
+        fields = ('name', 'parent', 'base_layer', 'rotation', 'scope_type', 'scope_id', 'description', 'comments', 'tags')
 
 
 class MapBulkEditForm(NetBoxModelBulkEditForm):
@@ -129,21 +141,28 @@ class MapMarkerForm(GenericObjectFormMixin, forms.ModelForm):
 
 
 class MapShapeForm(forms.ModelForm):
-    map = DynamicModelChoiceField(queryset=Map.objects.all(), label=_('Map'))
+    """
+    A shape's label, color and link. Shapes are drawn and reshaped on the map
+    itself, so the form has no points; the radius shows for circles only.
+    """
     color = ColorField(label=_('Color'))
+    link = DynamicModelChoiceField(queryset=Map.objects.all(), required=False, label=_('Opens map'))
 
     fieldsets = (
-        FieldSet('map', 'kind', 'label', 'color', name=_('Shape')),
-        FieldSet('points', 'radius', name=_('Geometry')),
+        FieldSet('label', 'color', 'link', 'radius', name=_('Shape')),
     )
 
     class Meta:
         model = MapShape
-        fields = ('map', 'kind', 'label', 'color', 'points', 'radius')
+        fields = ('label', 'color', 'link', 'radius')
         help_texts = {
-            'points': _('A list of [x, y] pairs, such as [[10, 20], [30, 40]]. A circle has one, its center.'),
-            'radius': _('Circles only: meters on a world map, pixels on an image-only map.'),
+            'radius': _('Meters on a world map, pixels on an image-only map.'),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.kind != ShapeKindChoices.CIRCLE:
+            del self.fields['radius']
 
 
 class MapPartFilterForm(NetBoxModelFilterSetForm):
