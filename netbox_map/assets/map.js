@@ -93,7 +93,14 @@
     var map = L.map(element, mapOptions);
     if (map.attributionControl) { map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>'); }
     if (!data.image_only && data.tiles.url) {
-      L.tileLayer(data.tiles.url, { attribution: data.tiles.attribution, maxZoom: data.tiles.max_zoom }).addTo(map);
+      // NetBox (Django) tells browsers to send no Referer to other sites, and
+      // OpenStreetMap's tile servers refuse requests without one. Send just
+      // NetBox's address (no page path) with tile requests.
+      L.tileLayer(data.tiles.url, {
+        attribution: data.tiles.attribution,
+        maxZoom: data.tiles.max_zoom,
+        referrerPolicy: 'strict-origin-when-cross-origin',
+      }).addTo(map);
     }
 
     var bounds = L.latLngBounds([]);

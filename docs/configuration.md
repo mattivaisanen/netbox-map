@@ -28,3 +28,6 @@ PLUGINS_CONFIG = {
 
 OpenStreetMap's public tiles are free for light use under their
 [tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+The policy requires a referrer, so tile requests send NetBox's address
+(without the page path), although NetBox otherwise sends none to other
+sites.

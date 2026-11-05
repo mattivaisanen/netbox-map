@@ -21,7 +21,8 @@ New:
   their rack, location or site), assigned maps on region, site group, site
   and location pages, and the rack's maps on rack pages.
 - Settings for the world map's tile server: `tile_url`, `tile_attribution`
-  and `max_zoom`.
+  and `max_zoom`. Tile requests carry NetBox's address as the referrer, as
+  OpenStreetMap's tile servers require.
 - Pages to list, add, change and delete all of these, and a REST API under
   `/api/plugins/maps/`.
 - When an object is deleted from NetBox, its markers leave every map.

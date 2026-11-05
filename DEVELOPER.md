@@ -97,6 +97,9 @@ out). The page embeds it with `json_script` and calls
 - **Status colors:** markers use NetBox's own `text-bg-<color>` classes
   with the object's `get_status_color()`, so they match its badges and
   follow light and dark mode.
+- **Tiles** are requested with `referrerPolicy: 'strict-origin-when-cross-origin'`.
+  Django's default `Referrer-Policy: same-origin` would send no referrer,
+  and OpenStreetMap blocks tile requests without one.
 - `?marker=<id>` highlights one marker and zooms to it; **Show on map**
   links use it.
 
@@ -107,7 +110,8 @@ folder, not as Django static files. Static files only reach NetBox's web
 server through `collectstatic`, which a plugin installed into, or mounted
 into, a container image after it was built never gets. The view serves a
 fixed list of files with a week of browser caching; `{% map_asset %}` adds
-`?v=<plugin version>` so an upgrade loads the new files.
+the plugin version and the file's modification time to the address, so a
+changed file is loaded at once.
 
 ## The editor
 
