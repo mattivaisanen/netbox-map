@@ -84,3 +84,10 @@
 .nbm-crumbs a { text-decoration: none; }
 .nbm-dot { display: inline-block; flex: 0 0 auto; width: .6rem; height: .6rem; border-radius: 50%; }
 .nbm-search .list-group { max-height: 14rem; overflow-y: auto; }
+
+/* Place search results: solid, like a NetBox dropdown. */
+.nbm-search .list-group-item { background: var(--tblr-bg-surface, #fff); color: var(--tblr-body-color, #1d273b); }
+.nbm-search .list-group-item:hover { background: var(--tblr-bg-surface-secondary, #f1f3f5); }
+
+/* While a tool is on, clicks also pass through markers; the editor snaps line ends to them instead. */
+.nbm-tool-on .leaflet-marker-icon:not(.nbm-handle) { pointer-events: none; }

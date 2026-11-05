@@ -25,3 +25,19 @@ class ShapeKindChoices(ChoiceSet):
         (AREA, _('Area')),
         (CIRCLE, _('Circle')),
     )
+
+
+class ShapeLevelChoices(ChoiceSet):
+    """
+    How high a shape lies. A line is drawn dashed where it runs under an
+    area or circle on a higher level, like a cable under a street.
+    """
+    BELOW = -1
+    GROUND = 0
+    ABOVE = 1
+
+    CHOICES = (
+        (BELOW, _('Below ground')),
+        (GROUND, _('Ground')),
+        (ABOVE, _('Above ground')),
+    )

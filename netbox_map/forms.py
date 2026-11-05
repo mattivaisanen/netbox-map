@@ -154,13 +154,13 @@ class MapShapeForm(GenericObjectFormMixin, forms.ModelForm):
     )
 
     fieldsets = (
-        FieldSet('label', 'color', 'link', 'radius', name=_('Shape')),
+        FieldSet('label', 'color', 'level', 'link', 'radius', name=_('Shape')),
         FieldSet('object', name=_('Route'), html_id='shape-object'),
     )
 
     class Meta:
         model = MapShape
-        fields = ('label', 'color', 'link', 'radius')
+        fields = ('label', 'color', 'level', 'link', 'radius')
         help_texts = {
             'radius': _('Meters on a world map, pixels on an image-only map.'),
         }
@@ -169,7 +169,10 @@ class MapShapeForm(GenericObjectFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance.kind != ShapeKindChoices.CIRCLE:
             del self.fields['radius']
-        if self.instance.kind != ShapeKindChoices.LINE:
+        if self.instance.kind == ShapeKindChoices.LINE:
+            # Lines (cables) lead somewhere themselves: they don't open maps.
+            del self.fields['link']
+        else:
             # Only lines are routes: no route field, and no empty Route section.
             del self.fields['object']
             self.fieldsets = self.fieldsets[:1]

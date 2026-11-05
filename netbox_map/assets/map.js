@@ -100,6 +100,8 @@
     } else {
       layer.bindPopup(markerPopup(marker, edit && data.can.change_marker));
     }
+    // Lines attached to the marker follow it (NetBox saves the same when the marker is saved).
+    layer.on('drag', function () { followMarker(state, marker.id, layer.getLatLng()); });
     layer.on('dragend', function () {
       api('PATCH', data.api.markers + marker.id + '/', fromLatLng(layer.getLatLng())).catch(failed);
     });
@@ -354,6 +356,221 @@
     return new Control();
   }
 
+  //
+  // Lines
+  //
+  // A line is drawn twice: a see-through "hit" line that takes the mouse
+  // (popups, cards, editing), and what is seen, in solid and dashed pieces.
+  // A piece is dashed where the line runs under an area or circle on a
+  // higher level. Lines between the same two things are moved sideways
+  // ("lanes") so they run side by side. The pieces are worked out again
+  // whenever the line or the areas change.
+
+  var HitLine = L.Polyline.extend({
+    setLatLngs: function (latlngs) {
+      L.Polyline.prototype.setLatLngs.call(this, latlngs);
+      if (this.nbmRedraw) { this.nbmRedraw(); }
+      return this;
+    },
+  });
+
+  // A polyline drawn `offset` pixels to the left of its points.
+  var OffsetLine = L.Polyline.extend({
+    _project: function () {
+      L.Polyline.prototype._project.call(this);
+      var offset = this.options.offset || 0;
+      if (!offset || !this._rings) { return; }
+      this._rings = this._rings.map(function (ring) { return offsetRing(ring, offset); });
+      if (this._pxBounds) {
+        var pad = L.point(Math.abs(offset), Math.abs(offset));
+        this._pxBounds = L.bounds(this._pxBounds.min.subtract(pad), this._pxBounds.max.add(pad));
+      }
+    },
+  });
+
+  // Moves each point of a pixel ring sideways by d. At a corner the point
+  // moves along the average of both segments' normals, far enough that both
+  // segments stay d away (capped on very sharp corners).
+  function offsetRing(ring, d) {
+    var n = ring.length;
+    if (n < 2) { return ring; }
+    var normals = [];
+    for (var i = 0; i < n - 1; i++) {
+      var dx = ring[i + 1].x - ring[i].x;
+      var dy = ring[i + 1].y - ring[i].y;
+      var length = Math.hypot(dx, dy) || 1;
+      normals.push(L.point(-dy / length, dx / length));
+    }
+    return ring.map(function (point, i) {
+      var a = normals[Math.max(0, i - 1)];
+      var b = normals[Math.min(n - 2, i)];
+      var mx = a.x + b.x;
+      var my = a.y + b.y;
+      var length = Math.hypot(mx, my);
+      if (length < 1e-6) { mx = a.x; my = a.y; length = 1; }
+      mx /= length;
+      my /= length;
+      var scale = d / Math.max(mx * a.x + my * a.y, 0.33);
+      return L.point(point.x + mx * scale, point.y + my * scale);
+    });
+  }
+
+  // Colors and width of a line: a cable route in its cable's color (or its
+  // status color, through a class), other lines in their own color.
+  function lineStyle(shape) {
+    var style = { color: shape.color, weight: 3, className: '' };
+    if (shape.object) {
+      style.weight = 5;
+      style.color = shape.route_color || '#6c757d';
+      if (!shape.route_color && shape.status) { style.className = 'nbm-route nbm-route-' + shape.status; }
+    }
+    return style;
+  }
+
+  // Gives lines with both ends attached to the same two things a lane
+  // each: ..., -1, 0, 1, ... (half lanes for an even count).
+  function assignLanes(state) {
+    var groups = {};
+    function key(end) { return end.marker ? 'm' + end.marker : 's' + end.shape; }
+    Object.keys(state.shapes).forEach(function (id) {
+      var entry = state.shapes[id];
+      var ends = entry.data.ends || {};
+      entry.lane = 0;
+      if (entry.data.kind !== 'line' || !ends.start || !ends.end) { return; }
+      var a = key(ends.start);
+      var b = key(ends.end);
+      // Lines drawn the other way round take the other side, so the lanes match.
+      entry.laneSign = a < b ? 1 : -1;
+      var group = a < b ? a + '|' + b : b + '|' + a;
+      (groups[group] = groups[group] || []).push(entry);
+    });
+    Object.keys(groups).forEach(function (group) {
+      var members = groups[group].sort(function (x, y) { return x.data.id - y.data.id; });
+      members.forEach(function (entry, i) { entry.lane = (i - (members.length - 1) / 2) * entry.laneSign; });
+    });
+  }
+
+  // Splits a line into pieces that are under a higher area or circle and
+  // pieces that aren't. Worked out in pixels at zoom 0 (the same for any view).
+  function linePieces(state, entry) {
+    var map = state.map;
+    var latlngs = entry.layer.getLatLngs();
+    function px(latlng) { return map.project(latlng, 0); }
+    var covers = [];
+    Object.keys(state.shapes).forEach(function (id) {
+      var other = state.shapes[id];
+      if ((other.data.level || 0) <= (entry.data.level || 0) || !map.hasLayer(other.layer)) { return; }
+      if (other.data.kind === 'area') {
+        covers.push({ ring: other.layer.getLatLngs()[0].map(px) });
+      } else if (other.data.kind === 'circle') {
+        var c = other.layer.getLatLng();
+        var r = other.layer.getRadius();
+        var edge = state.data.image_only ? L.latLng(c.lat + r, c.lng) : L.latLng(c.lat + r / 111320, c.lng);
+        covers.push({ center: px(c), radius: px(c).distanceTo(px(edge)) });
+      }
+    });
+    if (!covers.length || latlngs.length < 2) { return [{ latlngs: latlngs, under: false }]; }
+
+    var pieces = [];
+    var current = null;
+    for (var i = 0; i < latlngs.length - 1; i++) {
+      var a = px(latlngs[i]);
+      var b = px(latlngs[i + 1]);
+      var ts = [0, 1];
+      covers.forEach(function (cover) { ts = ts.concat(crossings(a, b, cover)); });
+      ts.sort(function (x, y) { return x - y; });
+      for (var j = 0; j < ts.length - 1; j++) {
+        if (ts[j + 1] - ts[j] < 1e-9) { continue; }
+        var middle = along(a, b, (ts[j] + ts[j + 1]) / 2);
+        var under = covers.some(function (cover) { return inside(middle, cover); });
+        var from = map.unproject(along(a, b, ts[j]), 0);
+        var to = map.unproject(along(a, b, ts[j + 1]), 0);
+        if (!current || current.under !== under) {
+          current = { under: under, latlngs: [from] };
+          pieces.push(current);
+        }
+        current.latlngs.push(to);
+      }
+    }
+    return pieces;
+  }
+
+  function along(a, b, t) { return L.point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t); }
+
+  // Where (0..1 along a→b) the segment crosses an area's or circle's outline.
+  function crossings(a, b, cover) {
+    var ts = [];
+    if (cover.ring) {
+      var ring = cover.ring;
+      for (var i = 0; i < ring.length; i++) {
+        var c = ring[i];
+        var d = ring[(i + 1) % ring.length];
+        var rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+        var den = rx * sy - ry * sx;
+        if (Math.abs(den) < 1e-12) { continue; }
+        var t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+        var u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+        if (u >= 0 && u <= 1) { ts.push(t); }
+      }
+    } else {
+      var dx = b.x - a.x, dy = b.y - a.y, fx = a.x - cover.center.x, fy = a.y - cover.center.y;
+      var A = dx * dx + dy * dy, B = 2 * (fx * dx + fy * dy), C = fx * fx + fy * fy - cover.radius * cover.radius;
+      var disc = B * B - 4 * A * C;
+      if (A > 0 && disc > 0) {
+        var root = Math.sqrt(disc);
+        ts.push((-B - root) / (2 * A), (-B + root) / (2 * A));
+      }
+    }
+    return ts.filter(function (t) { return t > 0 && t < 1; });
+  }
+
+  function inside(point, cover) {
+    if (!cover.ring) { return point.distanceTo(cover.center) < cover.radius; }
+    var ring = cover.ring;
+    var result = false;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      if ((ring[i].y > point.y) !== (ring[j].y > point.y) &&
+          point.x < (ring[j].x - ring[i].x) * (point.y - ring[i].y) / (ring[j].y - ring[i].y) + ring[i].x) {
+        result = !result;
+      }
+    }
+    return result;
+  }
+
+  // Draws (again) what is seen of one line.
+  function drawLine(state, entry) {
+    var style = lineStyle(entry.data);
+    var offset = (entry.lane || 0) * (style.weight + 2);
+    entry.visual.clearLayers();
+    linePieces(state, entry).forEach(function (piece) {
+      new OffsetLine(piece.latlngs, L.Util.extend({}, style, {
+        offset: offset, interactive: false, dashArray: piece.under ? '6 7' : null, lineCap: piece.under ? 'butt' : 'round',
+      })).addTo(entry.visual);
+    });
+  }
+
+  function drawAllLines(state) {
+    Object.keys(state.shapes).forEach(function (id) {
+      var entry = state.shapes[id];
+      if (entry.visual) { drawLine(state, entry); }
+    });
+  }
+
+  // Moves the ends of lines attached to a marker to where the marker is now.
+  function followMarker(state, markerId, latlng) {
+    Object.keys(state.shapes).forEach(function (id) {
+      var entry = state.shapes[id];
+      var ends = entry.data.ends || {};
+      if (!entry.visual) { return; }
+      var points = entry.layer.getLatLngs().slice();
+      var moved = false;
+      if (ends.start && ends.start.marker === markerId) { points[0] = latlng; moved = true; }
+      if (ends.end && ends.end.marker === markerId) { points[points.length - 1] = latlng; moved = true; }
+      if (moved) { entry.layer.setLatLngs(points); }
+    });
+  }
+
+
   // Place search for world maps: "lat, lon" goes straight there; anything
   // else (a city, an address) is looked up with the geocoder.
   var COORDINATES = /^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$/;
@@ -439,9 +656,12 @@
     var edit = !!options.edit;
     csrfToken = data.csrf_token || csrfToken;
     var layers = data.image_only ? [] : data.tiles.layers;
-    // World maps zoom in whole steps: between steps tiles are stretched and
-    // look blurred. Image-only maps can go in quarter steps.
-    var mapOptions = { zoomSnap: data.image_only ? 0.25 : 1, attributionControl: !data.image_only };
+    // World maps zoom in half steps. Leaflet rounds to the nearest tile
+    // level, so at a half step it shows the next level's tiles a little
+    // smaller, which stays sharp; quarter steps would stretch tiles and blur
+    // them. Image-only maps can go in quarter steps.
+    var step = data.image_only ? 0.25 : 0.5;
+    var mapOptions = { zoomSnap: step, zoomDelta: step, wheelPxPerZoomLevel: 120, attributionControl: !data.image_only };
     if (data.image_only) {
       mapOptions.crs = L.CRS.Simple;
       mapOptions.minZoom = -6;
@@ -500,16 +720,9 @@
       bounds.extend(layer.getBounds());
     });
 
-    // Shapes.
-    data.shapes.forEach(function (shape) {
+    // Shapes, lower levels first, so higher areas are drawn over them.
+    data.shapes.slice().sort(function (a, b) { return (a.level || 0) - (b.level || 0); }).forEach(function (shape) {
       var style = { color: shape.color, weight: 3, fillOpacity: 0.2, className: shape.link_url ? 'nbm-shape-link' : '' };
-      if (shape.object) {
-        // A cable or circuit route: the cable's own color, or else its
-        // status color (as a class, so it follows NetBox's theme).
-        style.weight = 5;
-        style.color = shape.route_color || '#6c757d';
-        if (!shape.route_color && shape.status) { style.className = 'nbm-route nbm-route-' + shape.status; }
-      }
       var points = shape.points.map(function (p) { return toLatLng(p[0], p[1]); });
       var layer;
       if (shape.kind === 'circle') {
@@ -517,7 +730,25 @@
       } else if (shape.kind === 'area') {
         layer = L.polygon(points, style);
       } else {
-        layer = L.polyline(points, style);
+        // Seen through; drawLine() draws what is seen (see "Lines" above).
+        layer = new HitLine(points, { opacity: 0, weight: 14 });
+      }
+      var entry = { data: shape, layer: layer };
+      if (shape.kind === 'line') {
+        entry.visual = L.layerGroup();
+        layer.on('add', function () { entry.visual.addTo(map); });
+        layer.on('remove', function () { map.removeLayer(entry.visual); });
+        layer.nbmRedraw = function () { if (state.linesReady) { drawLine(state, entry); } };
+      } else {
+        // Lines under this area or circle are drawn again when it changes.
+        (layer.setLatLngs ? ['setLatLngs'] : ['setLatLng', 'setRadius']).forEach(function (method) {
+          var original = layer[method];
+          layer[method] = function () {
+            var result = original.apply(this, arguments);
+            if (state.linesReady) { drawAllLines(state); }
+            return result;
+          };
+        });
       }
       layer.addTo(map);
       // A circle's bounds need the map's view, which isn't set yet: work them out here.
@@ -529,7 +760,7 @@
       } else {
         bounds.extend(layer.getBounds());
       }
-      state.shapes[shape.id] = { data: shape, layer: layer };
+      state.shapes[shape.id] = entry;
       var tooltip = shape.label || '';
       if (shape.link_url) { tooltip += (tooltip ? ': ' : '') + 'opens ' + shape.link_name; }
       if (shape.object && cardUrl(state, 'shape', shape.id)) {
@@ -552,6 +783,10 @@
         layer.on('click', function () { window.location.href = shape.link_url; });
       }
     });
+
+    assignLanes(state);
+    state.linesReady = true;
+    drawAllLines(state);
 
     // Markers. A marker for another map opens it on click; others show a popup.
     data.markers.forEach(function (marker) { addMarker(state, marker, edit); });
@@ -726,6 +961,8 @@
         if (show && !map.hasLayer(part.layer)) { part.layer.addTo(map); }
         if (!show && map.hasLayer(part.layer)) { map.removeLayer(part.layer); }
       });
+      // A hidden area no longer covers lines: draw them again.
+      drawAllLines(state);
     }
     var present = CATEGORIES.filter(function (c) { return parts.some(function (p) { return p.category === c.key; }); });
     if (present.length) {
@@ -958,7 +1195,7 @@
     });
 
     // Tools that take clicks on the map: placing a marker, adding one, drawing.
-    var drawing = null;   // { kind, points, preview }
+    var drawing = null;   // { kind, points, anchors, preview, cursor }
 
     function stopTool() {
       state.tool = null;
@@ -999,7 +1236,7 @@
         startTool({ draw: kind }, kind === 'circle'
           ? 'Click the center, then a point on the edge.'
           : 'Click the points, then Finish (or double-click the last point).');
-        drawing = { kind: kind, points: [], preview: null };
+        drawing = { kind: kind, points: [], anchors: [], preview: null, cursor: null };
         map.doubleClickZoom.disable();
         if (kind !== 'circle') {
           toolbar.querySelectorAll('[data-nbm-finish], [data-nbm-undo]').forEach(function (b) { b.classList.remove('d-none'); });
@@ -1007,18 +1244,29 @@
       });
     });
 
-    function saveShape(kind, points, radius) {
+    function saveShape(kind, points, radius, ends) {
       var label = window.prompt('Label for the ' + kind + ' (optional):', '');
       if (label === null) { stopTool(); return; }
       api('POST', data.api.shapes, {
-        map: data.id, kind: kind, label: label, points: points, radius: radius,
+        map: data.id, kind: kind, label: label, points: points, radius: radius, ends: ends || {},
       }).then(reload, failed);
+    }
+
+    // What the line's first and last points are attached to, for the API.
+    function drawnEnds() {
+      var ends = {};
+      var last = drawing.anchors.length - 1;
+      if (drawing.anchors[0]) { ends.start = drawing.anchors[0]; }
+      if (last > 0 && drawing.anchors[last]) { ends.end = drawing.anchors[last]; }
+      return ends;
     }
 
     function finishDrawing() {
       if (!drawing) { return; }
-      // A double-click adds its point twice; drop repeats.
-      drawing.points = drawing.points.filter(function (p, i, all) { return i === 0 || !p.equals(all[i - 1]); });
+      // A double-click adds its point twice; drop repeats (and their anchors).
+      var keep = drawing.points.map(function (p, i, all) { return i === 0 || !p.equals(all[i - 1]); });
+      drawing.points = drawing.points.filter(function (p, i) { return keep[i]; });
+      drawing.anchors = drawing.anchors.filter(function (a, i) { return keep[i]; });
       var least = drawing.kind === 'area' ? 3 : 2;
       if (drawing.points.length < least) {
         say('A ' + drawing.kind + ' needs at least ' + least + ' points.');
@@ -1031,12 +1279,12 @@
         say('Pick what this route is for.');
         pickRoute(state, drawing.points[drawing.points.length - 1], function (type, id) {
           api('POST', data.api.shapes, {
-            map: data.id, kind: 'line', points: points, object_type: type, object_id: id,
+            map: data.id, kind: 'line', points: points, object_type: type, object_id: id, ends: drawnEnds(),
           }).then(reload, failed);
         }, stopTool);
         return;
       }
-      saveShape(drawing.kind, points, null);
+      saveShape(drawing.kind, points, null, drawing.kind === 'line' ? drawnEnds() : {});
     }
 
     toolbar.querySelectorAll('[data-nbm-finish]').forEach(function (button) {
@@ -1047,19 +1295,94 @@
     function undoPoint() {
       if (!drawing || !drawing.points.length) { return; }
       drawing.points.pop();
+      drawing.anchors.pop();
       redrawPreview();
     }
     toolbar.querySelectorAll('[data-nbm-undo]').forEach(function (button) {
       button.addEventListener('click', undoPoint);
     });
 
+    // The shape so far, plus where the next click would go (dashed).
     function redrawPreview() {
       if (drawing.preview) { map.removeLayer(drawing.preview); }
-      var style = { color: '#2196f3', dashArray: '4 4', weight: 2 };
-      drawing.preview = drawing.kind === 'area' && drawing.points.length > 2
-        ? L.polygon(drawing.points, style) : L.polyline(drawing.points, style);
-      drawing.preview.addTo(map);
+      var style = { color: '#2196f3', dashArray: '4 4', weight: 2, interactive: false };
+      var points = drawing.points.slice();
+      if (drawing.cursor) { points.push(drawing.cursor.latlng); }
+      var preview = L.layerGroup();
+      if (drawing.kind === 'circle') {
+        if (drawing.points.length && drawing.cursor) {
+          var center = drawing.points[0];
+          new (state.data.rotation ? TurnedCircle : L.Circle)(center, L.Util.extend({ radius: circleRadius(center, drawing.cursor.latlng) }, style)).addTo(preview);
+        }
+      } else if (points.length > 1) {
+        (drawing.kind === 'area' && points.length > 2 ? L.polygon(points, style) : L.polyline(points, style)).addTo(preview);
+      }
+      // A ring where the next point snaps to a marker or an outline.
+      if (drawing.cursor && drawing.cursor.anchor) {
+        L.circleMarker(drawing.cursor.latlng, { radius: 7, color: '#2196f3', weight: 2, fill: false, interactive: false }).addTo(preview);
+      }
+      drawing.preview = preview.addTo(map);
     }
+
+    // Meters on a world map, map units (pixels) on an image-only one.
+    function circleRadius(center, edge) {
+      return data.image_only ? Math.hypot(edge.lat - center.lat, edge.lng - center.lng) : map.distance(center, edge);
+    }
+
+    // Where a click goes while drawing a line or cable: onto a marker near
+    // the mouse, or onto the outline of an area or circle, which then holds
+    // that end of the line ("anchor"). Anywhere else, just where it is.
+    var SNAP_PIXELS = 14;
+    function snapped(event) {
+      var free = { latlng: event.latlng, anchor: null };
+      if (!drawing || (drawing.kind !== 'line' && drawing.kind !== 'cable')) { return free; }
+      var mouse = event.containerPoint;
+      var best = null;
+      Object.keys(state.markers).forEach(function (id) {
+        var layer = state.markers[id];
+        if (!map.hasLayer(layer)) { return; }
+        var distance = map.latLngToContainerPoint(layer.getLatLng()).distanceTo(mouse);
+        if (distance < SNAP_PIXELS && (!best || distance < best.distance)) {
+          best = { distance: distance, latlng: layer.getLatLng(), anchor: { marker: parseInt(id, 10) } };
+        }
+      });
+      if (best) { return best; }
+      Object.keys(state.shapes).forEach(function (id) {
+        var shape = state.shapes[id];
+        if (!map.hasLayer(shape.layer) || (shape.data.kind !== 'area' && shape.data.kind !== 'circle')) { return; }
+        var point = nearestOnOutline(shape, mouse);
+        var distance = point.distanceTo(mouse);
+        if (distance < SNAP_PIXELS && (!best || distance < best.distance)) {
+          best = { distance: distance, latlng: map.containerPointToLatLng(point), anchor: { shape: parseInt(id, 10) } };
+        }
+      });
+      return best || free;
+    }
+
+    // The point on an area's or circle's outline nearest to `mouse` (container pixels).
+    function nearestOnOutline(shape, mouse) {
+      if (shape.data.kind === 'circle') {
+        var center = map.latLngToContainerPoint(shape.layer.getLatLng());
+        var radius = shape.layer._radius || 0;
+        var away = mouse.subtract(center);
+        var length = Math.hypot(away.x, away.y) || 1;
+        return center.add(away.multiplyBy(radius / length));
+      }
+      var ring = shape.layer.getLatLngs()[0].map(function (ll) { return map.latLngToContainerPoint(ll); });
+      var best = null;
+      ring.forEach(function (a, i) {
+        var b = ring[(i + 1) % ring.length];
+        var point = L.LineUtil.closestPointOnSegment(mouse, a, b);
+        if (!best || point.distanceTo(mouse) < best.distanceTo(mouse)) { best = point; }
+      });
+      return best;
+    }
+
+    map.on('mousemove', function (event) {
+      if (!drawing || !state.tool || !state.tool.draw) { return; }
+      drawing.cursor = snapped(event);
+      redrawPreview();
+    });
 
     map.on('click', function (event) {
       var tool = state.tool;
@@ -1074,14 +1397,12 @@
         drawing.points.push(event.latlng);
         if (drawing.points.length === 2) {
           var center = drawing.points[0];
-          // Meters on a world map, map units (pixels) on an image-only one.
-          var radius = data.image_only
-            ? Math.hypot(event.latlng.lat - center.lat, event.latlng.lng - center.lng)
-            : map.distance(center, event.latlng);
-          saveShape('circle', [[center.lng, center.lat]], radius);
+          saveShape('circle', [[center.lng, center.lat]], circleRadius(center, event.latlng));
         }
       } else if (tool.draw) {
-        drawing.points.push(event.latlng);
+        var at = snapped(event);
+        drawing.points.push(at.latlng);
+        drawing.anchors.push(at.anchor);
         redrawPreview();
       }
     });

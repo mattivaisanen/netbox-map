@@ -5,7 +5,7 @@ Settings live under `PLUGINS_CONFIG['netbox_map']` in NetBox's
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `base_layers` | list | Standard, Simple, Satellite (see below) | Backgrounds of world maps. Users switch between them in the map's side panel. Empty list: world maps have no background. |
+| `base_layers` | list | Standard, Satellite (see below) | Backgrounds of world maps. Users switch between them in the map's side panel. Empty list: world maps have no background. |
 | `geocoder_url` | string | `'https://nominatim.openstreetmap.org/search'` | Address of a [Nominatim](https://nominatim.org)-compatible search, used by the place box in the map editor. The browser calls it directly. Empty: the box accepts only coordinates. |
 | `hover_fields` | dict | `{}` | Details on the card shown when the mouse rests on a marker or a cable route, per object type. See below. |
 | `rack_elevation` | boolean | `True` | Show a rack's front elevation on its card. |
@@ -21,7 +21,7 @@ Each entry of `base_layers` is one background:
 | `name` | Shown on the layer's button. |
 | `url` | Tile address, with `{z}`, `{x}` and `{y}` where the zoom level and tile numbers go. `{s}` (subdomain) and `{r}` (`@2x` on high-resolution screens) also work. |
 | `attribution` | Credit shown in the map's corner. HTML is allowed. Most tile servers require one. |
-| `max_zoom` | Highest zoom level the server offers (default 19). Maps zoom in further, to level 22, by enlarging the last tiles. |
+| `max_zoom` | Highest zoom level the server offers (default 19). Maps zoom in further, to level 22, by enlarging the last tiles. Zooming goes in half steps. |
 
 Other keys go to Leaflet's
 [tile layer options](https://leafletjs.com/reference.html#tilelayer-option),
@@ -32,7 +32,6 @@ The defaults are:
 | Name | Source | Terms |
 |---|---|---|
 | Standard | OpenStreetMap | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): free for light use. |
-| Simple | CARTO light basemap | [CARTO attribution and terms](https://carto.com/attributions). Free use is limited. |
 | Satellite | Esri World Imagery | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
 
 Check that the terms fit how your organization uses NetBox. To use other

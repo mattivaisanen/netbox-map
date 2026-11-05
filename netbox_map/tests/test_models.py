@@ -117,6 +117,23 @@ class ShapeTests(TestCase):
         line.refresh_from_db()
         self.assertIsNone(line.object_id)
 
+    def test_line_ends_follow_their_marker(self):
+        map_ = make_map()
+        marker = MapMarker.objects.create(map=map_, label='Well', x=0, y=0)
+        line = MapShape(map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [5, 5]],
+                        ends={'start': {'marker': marker.pk}})
+        line.full_clean()
+        line.save()
+        marker.x, marker.y = 2, 3
+        marker.save()
+        line.refresh_from_db()
+        self.assertEqual(line.points, [[2, 3], [5, 5]])
+        # Ends are checked, and only lines have them.
+        for kind, ends in ((ShapeKindChoices.LINE, {'middle': {'marker': 1}}),
+                           (ShapeKindChoices.AREA, {'start': {'marker': marker.pk}})):
+            with self.subTest(kind=kind), self.assertRaises(ValidationError):
+                MapShape(map=map_, kind=kind, points=[[0, 0], [1, 0], [1, 1]], ends=ends).full_clean()
+
     def test_form_shows_radius_only_for_circles(self):
         map_ = make_map()
         area = MapShape.objects.create(map=map_, kind=ShapeKindChoices.AREA, points=[[0, 0], [1, 0], [1, 1]])
@@ -124,6 +141,10 @@ class ShapeTests(TestCase):
         self.assertNotIn('radius', MapShapeForm(instance=area).fields)
         self.assertIn('radius', MapShapeForm(instance=circle).fields)
         self.assertNotIn('points', MapShapeForm(instance=area).fields)
+        # Lines don't open maps.
+        line = MapShape.objects.create(map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [1, 1]])
+        self.assertNotIn('link', MapShapeForm(instance=line).fields)
+        self.assertIn('link', MapShapeForm(instance=area).fields)
 
 
 @override_settings(MEDIA_ROOT='/tmp/netbox-map-tests')

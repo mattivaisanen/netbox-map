@@ -10,10 +10,13 @@ database doesn't remove them by itself. When such an object is deleted:
 
 Overlay image files are deleted from storage with their overlay, and when
 a new file replaces them.
+
+A line whose end is attached to a marker follows the marker when it moves.
 """
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.db.models.signals import post_delete, pre_save
+from django.db.models import Q
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from .models import MAP_SCOPE_TYPES, Map, MapMarker, MapOverlay, MapShape
@@ -61,3 +64,27 @@ def overlay_replaced(sender, instance, raw=False, **kwargs):
     old = MapOverlay.objects.filter(pk=instance.pk).values_list('image', flat=True).first()
     if old and old != instance.image.name:
         _remove_file(old, instance.image.storage)
+
+
+@receiver(post_save, sender=MapMarker)
+def marker_moved(sender, instance, raw=False, **kwargs):
+    """Moves the attached ends of lines to the marker's new position."""
+    if raw or instance.x is None or instance.y is None:
+        return
+    lines = MapShape.objects.filter(map_id=instance.map_id).filter(
+        Q(ends__start__marker=instance.pk) | Q(ends__end__marker=instance.pk)
+    )
+    for line in lines:
+        points = [list(point) for point in line.points]
+        if not points:
+            continue
+        position = [instance.x, instance.y]
+        changed = False
+        for end, index in (('start', 0), ('end', -1)):
+            if (line.ends.get(end) or {}).get('marker') == instance.pk and points[index] != position:
+                points[index] = position
+                changed = True
+        if changed:
+            line.snapshot()
+            line.points = points
+            line.save()

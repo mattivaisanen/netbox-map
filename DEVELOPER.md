@@ -105,8 +105,10 @@ out). The page embeds it with `json_script` and calls
   links use it.
 - **Zoom:** world maps go to level 22. Each tile layer's `maxNativeZoom`
   is its `max_zoom`, so Leaflet enlarges the last real tiles beyond it.
-  World maps use `zoomSnap: 1`: at in-between zoom levels Leaflet stretches
-  the tiles, which blurs them. Image-only maps keep quarter steps.
+  World maps use half zoom steps. Leaflet shows the nearest tile level, so
+  at x.5 it shows the next level's tiles slightly shrunk, which stays
+  sharp; at quarter steps tiles would be stretched and blurred. Image-only
+  maps keep quarter steps.
 - **Background layers:** one Leaflet tile layer per `base_layers` entry,
   one shown at a time (`setBaseLayer()`). The choice is kept in
   `localStorage`, like the sidebar's switches; storage errors are ignored.
@@ -161,6 +163,24 @@ so its links can be clicked, and closes 300 ms after the mouse leaves.
 A rack's card puts an `<img>` of NetBox's own elevation SVG
 (`/api/dcim/racks/<id>/elevation/?render=svg`, so NetBox applies its own
 permissions) beside its details and its devices.
+
+## Lines: ends, lanes and levels
+
+Each line is two things in `map.js` (see "Lines" there): a see-through
+`HitLine` that takes the mouse, and the drawn pieces (`OffsetLine`) in a
+layer group that comes and goes with it. `linePieces()` cuts the line where
+it crosses the outline of a higher-`level` area or circle (in zoom-0
+pixels) and dashes the pieces inside. `assignLanes()` groups lines whose
+`ends` are attached to the same two things and gives each a lane;
+`OffsetLine` moves its projected points sideways by lane × width, with
+mitred corners. Pieces are recomputed when a line or an area changes.
+
+`MapShape.ends` is `{"start": {"marker": id}, "end": {"shape": id}}`. While
+drawing, `snapped()` puts a click on a marker within 14 px, or on the
+nearest point of an area's or circle's outline. Markers ignore the mouse
+while a tool is on (`nbm-tool-on`) so the click reaches the map. When a
+marker is saved, `signals.marker_moved` moves the attached ends (change
+logged); the editor moves them live during the drag (`followMarker()`).
 
 ## Cable routes
 

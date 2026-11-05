@@ -105,6 +105,8 @@ def _shape(shape, user):
         'color': f'#{shape.color}',
         'points': shape.points,
         'radius': shape.radius,
+        'level': shape.level,
+        'ends': shape.ends or {},
         'link_url': shape.link.get_absolute_url() if shape.link_id else None,
         'link_name': shape.link.name if shape.link_id else None,
         # The route's object: 'app.model:id', its kind and name, and its status

@@ -30,7 +30,7 @@ from netbox.models import ChangeLoggedModel, NetBoxModel
 from utilities.fields import ColorField
 
 from . import images
-from .choices import BaseLayerChoices, ShapeKindChoices
+from .choices import BaseLayerChoices, ShapeKindChoices, ShapeLevelChoices
 
 # Models a map can be assigned to. Its page then shows the map.
 MAP_SCOPE_TYPES = LOCATION_SCOPE_TYPES  # region, site group, site, location
@@ -276,6 +276,14 @@ class MapShape(ChangeLoggedModel):
     )
     object_id = models.PositiveBigIntegerField(blank=True, null=True)
     object = GenericForeignKey(ct_field='object_type', fk_field='object_id')
+    level = models.SmallIntegerField(
+        verbose_name=_('level'), choices=ShapeLevelChoices, default=ShapeLevelChoices.GROUND,
+        help_text=_('A line is drawn dashed where it runs under an area or circle on a higher level.'),
+    )
+    # What a line's ends are attached to on the map, so they follow when it
+    # moves: {"start": {"marker": <id>}, "end": {"shape": <id>}}. Only on the
+    # map: nothing is connected in NetBox.
+    ends = models.JSONField(verbose_name=_('ends'), default=dict, blank=True)
 
     class Meta:
         ordering = ('map', 'label', 'pk')
@@ -319,3 +327,13 @@ class MapShape(ChangeLoggedModel):
                 raise ValidationError({'object': _('Only a line can be the route of a cable or circuit.')})
             if (self.object_type.app_label, self.object_type.model) not in ROUTE_MODELS:
                 raise ValidationError({'object': _('A line can be the route of a cable, cable bundle or circuit.')})
+        if self.ends:
+            valid = isinstance(self.ends, dict) and all(
+                end in ('start', 'end') and isinstance(target, dict) and len(target) == 1
+                and next(iter(target)) in ('marker', 'shape') and isinstance(next(iter(target.values())), int)
+                for end, target in self.ends.items()
+            )
+            if not valid:
+                raise ValidationError({'ends': _('Ends look like {"start": {"marker": 1}, "end": {"shape": 2}}.')})
+            if self.kind != ShapeKindChoices.LINE:
+                raise ValidationError({'ends': _('Only a line has ends.')})

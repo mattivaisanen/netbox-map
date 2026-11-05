@@ -30,8 +30,8 @@ New:
 - Place search in the editor of world maps: a city, an address or a
   latitude and longitude, with a list to pick from when several places
   match. Set `geocoder_url` to use another search server.
-- Background layers for world maps (Standard, Simple and Satellite by
-  default), switched in the side panel and set with `base_layers`.
+- Background layers for world maps (Standard and Satellite by default),
+  switched in the side panel and set with `base_layers`.
 - Side panel beside the map: where the map is, the background, switches to
   hide kinds of things, linked maps, and the racks, devices and cables on
   the map.
@@ -48,7 +48,13 @@ New:
 - Resting the mouse on a marker shows a card with the object's details in
   NetBox's style. Racks show their elevation next to their details and
   devices. The details are set with `hover_fields`.
-- World maps zoom in whole steps, so map tiles stay sharp.
+- World maps zoom in half steps, which keeps map tiles sharp.
+- While drawing, a dashed line shows where the next click goes.
+- Line ends can be attached to markers, areas and circles on the map.
+  Ends on a marker follow it, and lines between the same two things are
+  drawn side by side.
+- Shape levels: a line is dashed where it runs under an area or circle on
+  a higher level, such as a cable under a street.
 - Racks are drawn as squares and map links as diamonds.
 - When an object is deleted from NetBox, its markers leave every map.
 - `prepare_map_uninstall` removes NetBox's rows about maps before the plugin

@@ -42,7 +42,7 @@ location or site.
 - NetBox 4.7 or later. NetBox refuses to load the plugin on older versions.
 - No other plugins, and no Python packages beyond what NetBox installs.
 - For world maps, browsers need to reach map tile servers. The defaults
-  are OpenStreetMap, CARTO and Esri; servers in your own network can be set
+  are OpenStreetMap and Esri; servers in your own network can be set
   instead (see [configuration](docs/configuration.md)). Image-only maps
   need nothing.
 
