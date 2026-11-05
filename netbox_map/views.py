@@ -1,4 +1,7 @@
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext_lazy as _
+from django.views.generic import View
 
 from netbox.object_actions import AddObject, BulkDelete, BulkExport
 from netbox.views import generic
@@ -184,3 +187,19 @@ class MapShapeBulkDeleteView(generic.BulkDeleteView):
     queryset = MapShape.objects.all()
     filterset = filtersets.MapShapeFilterSet
     table = tables.MapShapeTable
+
+
+#
+# Data of one marker, as the map draws it. The editor reads it after adding
+# a marker through the REST API, to draw it with its status color and icon.
+#
+
+class MarkerDataView(View):
+    def get(self, request, pk):
+        if not request.user.is_authenticated:
+            return JsonResponse({'detail': 'Not logged in.'}, status=403)
+        marker = get_object_or_404(MapMarker.objects.restrict(request.user, 'view'), pk=pk)
+        data = viewer.marker_data(marker, request.user)
+        if data is None:
+            return JsonResponse({'detail': 'Not found.'}, status=404)
+        return JsonResponse(data)

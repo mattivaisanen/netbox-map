@@ -124,6 +124,12 @@ CSRF cookie is HttpOnly, so the token comes in the page data.
 - Drawing collects clicks and sends a `POST` to `shapes/` when finished,
   then reloads the page. A double-click adds its point twice; repeats are
   dropped.
+- **Right-click menu** (`startContextMenu()`): devices, racks and maps are
+  searched through NetBox's REST API (`viewer.SEARCHABLE`, limited to the
+  map's scope with the matching `*_id` filter), labels are typed in place.
+  The marker is created with a `POST`, then drawn from
+  `markers/<id>/data/` (`MarkerDataView`), which returns the same data as
+  the page, so the new marker has its status color without a reload.
 - **Add marker** sends the user to the normal marker form with `map`, `x`
   and `y` filled in (NetBox fills form fields from the query string), so
   picking any object type works the same as everywhere else in NetBox.

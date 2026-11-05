@@ -14,7 +14,9 @@ New:
 - The map drawn on its page with Leaflet, fitted to the window. Markers
   show their object's status color and name; a marker for another map
   opens it.
-- Map editor: drag markers, place markers that have no position yet, draw
+- A button under the zoom buttons brings the whole map back into view.
+- Map editor: right-click the map to add a device, rack, map link or label
+  right there, picked from a search list. Drag markers, place markers that have no position yet, draw
   lines, areas and circles, move and stretch images and change their
   opacity.
 - **Show on map** on the page of every object on a map (devices fall back to

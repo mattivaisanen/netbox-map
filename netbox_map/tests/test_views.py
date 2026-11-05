@@ -83,3 +83,9 @@ class MapViewTests(TestCase):
         site = make_site('Site C')
         make_map('Site C plan', scope_type=ContentType.objects.get_for_model(site), scope_id=site.pk)
         self.assertContains(self.client.get(site.get_absolute_url()), 'Site C plan')
+
+    def test_marker_data_for_the_editor(self):
+        device = make_device()
+        marker = MapMarker.objects.create(map=make_map(), object=device, x=1, y=2)
+        data = self.client.get(reverse('plugins:netbox_map:marker_data', args=[marker.pk])).json()
+        self.assertEqual((data['label'], data['object'], data['status']), (device.name, f'dcim.device:{device.pk}', 'green'))

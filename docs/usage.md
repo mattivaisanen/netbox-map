@@ -5,7 +5,8 @@ Everything is under **Maps** in the navigation bar.
 ## Viewing a map
 
 A map's page shows the map itself, zoomed to fit everything on it. Drag to
-move around and scroll or use **+**/**−** to zoom.
+move around and scroll or use **+**/**−** to zoom. The button under them
+brings the whole map back into view.
 
 - Markers are colored by their object's status (the same colors as NetBox's
   status badges), unless the marker has a color of its own. Each shows its
@@ -21,9 +22,10 @@ it off. Everything is saved as you go.
 
 | To | Do |
 |---|---|
+| Add a device, rack, map link or label | Right-click the spot, pick what to add, then pick it from the list (or type the label). Devices and racks are limited to the map's region, site or location when it has one. |
 | Move a marker | Drag it. |
 | Put a marker that has no position yet on the map | Click its name under **Not on the map yet**, then click the spot. |
-| Add a marker | **Add marker**, click the spot, then pick the object (or type a label) in the form. |
+| Add any other object | **Add marker**, click the spot, then pick the object in the form. |
 | Draw a line or an area | **Line** or **Area**, click the points, then **Finish** or double-click the last point. |
 | Draw a circle | **Circle**, click the center, then a point on the edge. |
 | Edit or delete a shape | Click it. |

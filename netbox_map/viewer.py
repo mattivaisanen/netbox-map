@@ -54,6 +54,8 @@ def _marker(marker, user):
     status_color = obj.get_status_color() if obj is not None and hasattr(obj, 'get_status_color') else None
     return {
         'id': marker.pk,
+        # 'app.model:id', so the editor can tell which objects are already on the map.
+        'object': f'{type_label}:{marker.object_id}' if marker.object_type_id else None,
         'x': marker.x,
         'y': marker.y,
         'label': str(marker),
@@ -93,6 +95,42 @@ def _shape(shape):
     }
 
 
+# What the editor's right-click menu can add, and the REST API it searches.
+SEARCHABLE = {
+    'device': ('dcim.device', 'dcim-api:device-list', 'dcim.view_device'),
+    'rack': ('dcim.rack', 'dcim-api:rack-list', 'dcim.view_rack'),
+    'map': ('netbox_map.map', 'plugins-api:netbox_map-api:map-list', 'netbox_map.view_map'),
+}
+
+# The REST API filter for objects inside a map's region, site group, site or location.
+SCOPE_FILTERS = {'region': 'region_id', 'sitegroup': 'site_group_id', 'site': 'site_id', 'location': 'location_id'}
+
+
+def marker_data(marker, user):
+    """One marker as map.js draws it (used by the editor after adding one)."""
+    return _marker(marker, user)
+
+
+def _search_sources(map_, user):
+    """
+    Where the right-click menu looks for devices, racks and maps. Devices and
+    racks are limited to the map's region, site group, site or location
+    when it has one.
+    """
+    sources = {}
+    scope_filter = ''
+    if map_.scope_type_id and map_.scope_type.model in SCOPE_FILTERS:
+        scope_filter = urlencode({SCOPE_FILTERS[map_.scope_type.model]: map_.scope_id})
+    for kind, (object_type, viewname, permission) in SEARCHABLE.items():
+        if not user.has_perm(permission):
+            continue
+        url = reverse(viewname)
+        if scope_filter and kind != 'map':
+            url += f'?{scope_filter}'
+        sources[kind] = {'type': object_type, 'url': url}
+    return sources
+
+
 def map_data(map_, request, highlight=None):
     """Everything assets/map.js needs to draw `map_` for this request's user."""
     user = request.user
@@ -128,6 +166,9 @@ def map_data(map_, request, highlight=None):
             {'map': map_.pk, 'return_url': return_url}
         ),
         'return_url': return_url,
+        'search': _search_sources(map_, user),
+        # The address of one marker's data; map.js puts the marker's ID in place of the 0.
+        'marker_data_url': reverse('plugins:netbox_map:marker_data', args=[0]),
         # NetBox's CSRF cookie is HttpOnly, so the editor gets the token here.
         'csrf_token': get_token(request),
     }
