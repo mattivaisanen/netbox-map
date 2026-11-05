@@ -1,0 +1,84 @@
+{% load i18n %}
+{# Editing tools above the map. assets/map.js wires up every data-nbm-* element. #}
+<div id="nbm-toolbar" class="card-body border-bottom">
+  <div class="nbm-toolbar">
+    {% if map_data.can.add_marker %}
+      <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-add-marker>
+        <i class="mdi mdi-map-marker-plus" aria-hidden="true"></i> {% trans "Add marker" %}
+      </button>
+    {% endif %}
+    {% if map_data.can.add_shape %}
+      <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="line">
+        <i class="mdi mdi-vector-polyline" aria-hidden="true"></i> {% trans "Line" %}
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="area">
+        <i class="mdi mdi-vector-polygon" aria-hidden="true"></i> {% trans "Area" %}
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="circle">
+        <i class="mdi mdi-vector-circle" aria-hidden="true"></i> {% trans "Circle" %}
+      </button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="junction" title="{% trans 'A manhole, cable well, pole or other point that cables run through' %}">
+        <i class="mdi mdi-circle-double" aria-hidden="true"></i> {% trans "Junction" %}
+      </button>
+      {% if map_data.search.cable or map_data.search.cablebundle or map_data.search.circuit %}
+        <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="cable" title="{% trans 'Draw the route of a cable, cable bundle or circuit' %}">
+          <i class="mdi mdi-cable-data" aria-hidden="true"></i> {% trans "Cable" %}
+        </button>
+      {% endif %}
+      <button type="button" class="btn btn-sm btn-outline-secondary d-none" data-nbm-undo title="{% trans 'Remove the last point (Backspace)' %}">
+        <i class="mdi mdi-undo" aria-hidden="true"></i> {% trans "Undo" %}
+      </button>
+      <button type="button" class="btn btn-sm btn-success d-none" data-nbm-finish>
+        <i class="mdi mdi-check" aria-hidden="true"></i> {% trans "Finish" %}
+      </button>
+    {% endif %}
+    {% if map_data.can.add_overlay %}
+      <a href="{% url 'plugins:netbox_map:mapoverlay_add' %}?map={{ object.pk }}&return_url={{ object.get_absolute_url }}%3Fedit%3D1" class="btn btn-sm btn-outline-primary">
+        <i class="mdi mdi-image-plus" aria-hidden="true"></i> {% trans "Add image" %}
+      </a>
+    {% endif %}
+    {% if map_data.can.change_map %}
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-nbm-set-view title="{% trans 'Open the map at what is on screen now' %}">
+        <i class="mdi mdi-crosshairs-gps" aria-hidden="true"></i> {% trans "Set start view" %}
+      </button>
+      {% if map_data.default_view %}
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-nbm-clear-view title="{% trans 'Open the map fitted to everything on it' %}">
+          <i class="mdi mdi-crosshairs-off" aria-hidden="true"></i> {% trans "Clear start view" %}
+        </button>
+      {% endif %}
+      <span class="input-group input-group-sm nbm-rotation" title="{% trans 'Degrees the map is turned clockwise' %}">
+        <span class="input-group-text"><i class="mdi mdi-rotate-right" aria-hidden="true"></i></span>
+        <input type="number" class="form-control" min="-360" max="360" step="1" value="{{ map_data.rotation|floatformat:'-2' }}"
+               data-nbm-rotation aria-label="{% trans 'Rotation' %}">
+        <span class="input-group-text">°</span>
+      </span>
+    {% endif %}
+    <span class="text-secondary small" data-nbm-hint>{% trans "Right-click the map to add a device, rack, map link or label. Drag markers to move them. Drag an image's corners to stretch it, its middle to move it." %}</span>
+  </div>
+
+  {% if map_data.can.change_overlay and map_data.overlays %}
+    <div class="nbm-toolbar mt-2">
+      {% for overlay in map_data.overlays %}
+        <span class="badge text-bg-light border">
+          {{ overlay.name }}
+          <input type="range" class="form-range d-inline-block align-middle ms-1" min="0" max="100" value="{{ overlay.opacity }}"
+                 data-nbm-opacity="{{ overlay.id }}" title="{% trans 'Opacity' %}" aria-label="{% trans 'Opacity' %}">
+          {% if not overlay.bounds and not map_data.image_only %}
+            <button type="button" class="btn btn-sm btn-primary ms-1" data-nbm-place-overlay="{{ overlay.id }}">{% trans "Place in view" %}</button>
+          {% endif %}
+        </span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% if map_data.can.change_marker and unplaced_markers %}
+    <div class="nbm-toolbar mt-2">
+      <span class="small text-secondary">{% trans "Not on the map yet:" %}</span>
+      {% for marker in unplaced_markers %}
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-nbm-place-marker="{{ marker.id }}" data-nbm-name="{{ marker.label }}">
+          <i class="mdi mdi-{{ marker.icon }}" aria-hidden="true"></i> {{ marker.label }}
+        </button>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

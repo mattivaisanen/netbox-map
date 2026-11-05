@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-map"
+version = "0.1.0"
+description = "Maps in NetBox: world maps or your own floor plans, with image overlays, drawn shapes, and devices, racks and other objects placed on them."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Matti" }]
+requires-python = ">=3.10"
+# NetBox itself provides Django and everything else the plugin uses. The
+# supported NetBox versions are checked at startup (min_version in
+# netbox_map/__init__.py).
+dependencies = []
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/mattivaisanen/netbox-map"
+Documentation = "https://github.com/mattivaisanen/netbox-map/tree/main/docs"
+Changelog = "https://github.com/mattivaisanen/netbox-map/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["netbox_map*"]
+
+# Templates and the map assets are not Python files, so they must be listed to end up in the wheel.
+[tool.setuptools.package-data]
+netbox_map = ["templates/**/*.html", "assets/*"]
