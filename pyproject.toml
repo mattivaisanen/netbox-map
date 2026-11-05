@@ -28,6 +28,6 @@ Changelog = "https://github.com/mattivaisanen/netbox-map/blob/main/CHANGELOG.md"
 [tool.setuptools.packages.find]
 include = ["netbox_map*"]
 
-# Templates are not Python files, so they must be listed to end up in the wheel.
+# Templates and the map assets are not Python files, so they must be listed to end up in the wheel.
 [tool.setuptools.package-data]
-netbox_map = ["templates/**/*.html"]
+netbox_map = ["templates/**/*.html", "assets/*"]

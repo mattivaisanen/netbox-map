@@ -2,6 +2,49 @@
 
 Everything is under **Maps** in the navigation bar.
 
+## Viewing a map
+
+A map's page shows the map itself, zoomed to fit everything on it. Drag to
+move around and scroll or use **+**/**−** to zoom.
+
+- Markers are colored by their object's status (the same colors as NetBox's
+  status badges), unless the marker has a color of its own. Each shows its
+  name below it.
+- Click a marker for a link to its object. A square marker is another map:
+  clicking it opens that map.
+- **↑ parent** in the card header goes up to the parent map.
+
+## Editing a map
+
+**Edit map** in the map's card header turns on the editor. **Done** turns
+it off. Everything is saved as you go.
+
+| To | Do |
+|---|---|
+| Move a marker | Drag it. |
+| Put a marker that has no position yet on the map | Click its name under **Not on the map yet**, then click the spot. |
+| Add a marker | **Add marker**, click the spot, then pick the object (or type a label) in the form. |
+| Draw a line or an area | **Line** or **Area**, click the points, then **Finish** or double-click the last point. |
+| Draw a circle | **Circle**, click the center, then a point on the edge. |
+| Edit or delete a shape | Click it. |
+| Add an image | **Add image**. On a world map, **Place in view** then puts it in the middle of what you see. |
+| Move or stretch an image | Drag its round middle handle to move it, its square corner handles to stretch it. |
+| Change an image's opacity | The slider next to its name. |
+
+What a user can do follows their permissions: changing markers needs
+`change` on Marker, drawing needs `add` on Shape, and so on.
+
+Esc cancels the current tool.
+
+## Maps on other pages
+
+- **Show on map** appears on the page of any object that is on a map. It
+  opens the map zoomed in on the object. A device that isn't on a map
+  itself is shown through its rack, location or site, in that order.
+- A region, site group, site or location page shows the maps assigned to
+  it.
+- A rack page shows the maps the rack is on, with the rack marked.
+
 ## Maps
 
 A map has a name and a **base layer**:
@@ -15,7 +58,9 @@ Use *World map* when places on the map are far apart (a campus, a city, a
 country) and *Image only* for a floor plan or a rack room.
 
 **Parent** puts a map under another one: a floor under its building, a
-building under its campus. The parent's page lists its submaps.
+building under its campus. The parent's page lists its submaps. To get
+from the parent map to a submap by clicking, add the submap to the parent
+as a marker.
 
 **Assigned to** ties the map to a region, site group, site or location.
 If that object is deleted, the map stays and is no longer assigned.

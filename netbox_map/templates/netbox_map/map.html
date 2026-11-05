@@ -5,6 +5,46 @@
 {% load render_table from django_tables2 %}
 
 {% block content %}
+{% include 'netbox_map/inc/map_assets.html' %}
+<div class="row mb-3">
+  <div class="col col-md-12">
+    <div class="card">
+      <h2 class="card-header">
+        {% if editing %}{% trans "Editing map" %}{% else %}{% trans "Map" %}{% endif %}
+        <div class="card-actions">
+          {% if object.parent %}
+            <a href="{{ object.parent.get_absolute_url }}" class="btn btn-ghost-secondary btn-sm">
+              <i class="mdi mdi-arrow-up" aria-hidden="true"></i> {{ object.parent }}
+            </a>
+          {% endif %}
+          {% if can_edit %}
+            {% if editing %}
+              <a href="{{ object.get_absolute_url }}" class="btn btn-success btn-sm">
+                <i class="mdi mdi-check" aria-hidden="true"></i> {% trans "Done" %}
+              </a>
+            {% else %}
+              <a href="?edit=1" class="btn btn-ghost-primary btn-sm">
+                <i class="mdi mdi-pencil" aria-hidden="true"></i> {% trans "Edit map" %}
+              </a>
+            {% endif %}
+          {% endif %}
+        </div>
+      </h2>
+      {% if editing %}
+        {% include 'netbox_map/inc/editor_toolbar.html' %}
+      {% endif %}
+      <div id="nbm-map" class="nbm-map"></div>
+      {{ map_data|json_script:"nbm-map-data" }}
+      <script>
+        NetBoxMap.render(
+          document.getElementById('nbm-map'),
+          JSON.parse(document.getElementById('nbm-map-data').textContent),
+          {edit: {{ editing|yesno:"true,false" }}, toolbar: document.getElementById('nbm-toolbar')}
+        );
+      </script>
+    </div>
+  </div>
+</div>
 <div class="row mb-3">
   <div class="col col-md-6">
     <div class="card">

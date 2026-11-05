@@ -1,0 +1,18 @@
+{% load i18n %}
+{# The "Show on map" button on an object's page: a link, or a menu when it is on several maps. #}
+{% if links|length == 1 %}
+  <a href="{{ links.0.url }}" class="btn btn-primary">
+    <i class="mdi mdi-map-search-outline" aria-hidden="true"></i> {% trans "Show on map" %}
+  </a>
+{% else %}
+  <div class="dropdown">
+    <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="mdi mdi-map-search-outline" aria-hidden="true"></i> {% trans "Show on map" %}
+    </button>
+    <ul class="dropdown-menu">
+      {% for link in links %}
+        <li><a class="dropdown-item" href="{{ link.url }}">{{ link.text }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}

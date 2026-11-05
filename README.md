@@ -10,9 +10,8 @@ drawings, aerial photos) laid on top, or just your own image on its own.
 Maps can contain other maps, so a campus map can lead to a building, and the
 building to each floor.
 
-> **Status:** early development. This version stores maps and what is on
-> them, with pages to manage them and a REST API. Drawing the map in the
-> browser comes next; see the [changelog](CHANGELOG.md).
+Maps are drawn and edited right in NetBox: drag devices into place, draw
+room outlines, and line a floor plan up with the world map below it.
 
 ## What you can put on a map
 
@@ -27,12 +26,18 @@ building to each floor.
 The same object can be on several maps, for example on a building overview
 and on its floor plan.
 
-A map can be assigned to a region, site group, site or location.
+A map can be assigned to a region, site group, site or location, and then
+shows on that object's page. Every object on a map gets a **Show on map**
+button, and a device that isn't on a map itself is found through its rack,
+location or site.
 
 ## Requirements
 
 - NetBox 4.7 or later. NetBox refuses to load the plugin on older versions.
 - No other plugins, and no Python packages beyond what NetBox installs.
+- For world maps, browsers need to reach a map tile server. OpenStreetMap
+  is the default; a server in your own network can be set instead (see
+  [configuration](docs/configuration.md)). Image-only maps need nothing.
 
 ## Installation
 
@@ -94,4 +99,6 @@ does.
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE).
+Apache License 2.0, see [LICENSE](LICENSE). Includes
+[Leaflet](https://leafletjs.com) 1.9.4 (BSD 2-Clause, see
+`netbox_map/assets/LICENSE-leaflet.txt`).

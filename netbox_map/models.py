@@ -154,7 +154,7 @@ class MapOverlay(ChangeLoggedModel):
 
     def save(self, *args, **kwargs):
         # Remember the pixel size whenever a new file comes in.
-        if self.image and not getattr(self.image, '_committed', True):
+        if self.image and (not getattr(self.image, '_committed', True) or not self.image_width):
             self.image_width, self.image_height = images.image_size(self.image.file)
         super().save(*args, **kwargs)
 

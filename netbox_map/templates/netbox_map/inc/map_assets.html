@@ -1,0 +1,6 @@
+{% load netbox_map %}
+{# Leaflet and the map script, served by the plugin (see assets.py). #}
+<link rel="stylesheet" href="{% map_asset 'leaflet.css' %}">
+<link rel="stylesheet" href="{% map_asset 'map.css' %}">
+<script src="{% map_asset 'leaflet.js' %}"></script>
+<script src="{% map_asset 'map.js' %}"></script>

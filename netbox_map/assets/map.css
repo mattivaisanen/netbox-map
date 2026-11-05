@@ -1,0 +1,17 @@
+/* Map styles. Colors come from NetBox's own classes (text-bg-*), so they follow its light and dark themes. */
+.nbm-map { width: 100%; height: calc(100vh - 260px); min-height: 420px; border-radius: 0 0 var(--tblr-border-radius, 4px) var(--tblr-border-radius, 4px); }
+.nbm-map.nbm-compact { height: 360px; min-height: 0; }
+.nbm-map.leaflet-container { background: var(--tblr-bg-surface-secondary, #f1f3f5); font: inherit; }
+.nbm-marker { background: none; border: none; }
+.nbm-pin { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, .45); font-size: 16px; line-height: 1; }
+.nbm-pin-link { border-radius: 6px; }
+.nbm-pin-highlight { outline: 3px solid var(--tblr-primary, #00d1b2); outline-offset: 2px; animation: nbm-pulse 1.4s ease-in-out infinite; }
+@keyframes nbm-pulse { 50% { outline-offset: 7px; } }
+.nbm-handle { background: #fff; border: 2px solid var(--tblr-primary, #00d1b2); border-radius: 2px; }
+.nbm-handle-move { border-radius: 50%; }
+.nbm-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.nbm-toolbar .form-range { width: 8rem; }
+.leaflet-tooltip.nbm-label { background: rgba(255, 255, 255, .85); border: none; box-shadow: none; padding: 0 4px;
+  font-size: 11px; font-weight: 600; color: #1d273b; }
+.leaflet-tooltip.nbm-label::before { display: none; }

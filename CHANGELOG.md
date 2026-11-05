@@ -11,6 +11,17 @@ New:
 - Markers: any NetBox object, another map, or a text label at a point on a
   map. An object can be on many maps.
 - Shapes: lines, areas and circles on a map.
+- The map drawn on its page with Leaflet, fitted to the window. Markers
+  show their object's status color and name; a marker for another map
+  opens it.
+- Map editor: drag markers, place markers that have no position yet, draw
+  lines, areas and circles, move and stretch images and change their
+  opacity.
+- **Show on map** on the page of every object on a map (devices fall back to
+  their rack, location or site), assigned maps on region, site group, site
+  and location pages, and the rack's maps on rack pages.
+- Settings for the world map's tile server: `tile_url`, `tile_attribution`
+  and `max_zoom`.
 - Pages to list, add, change and delete all of these, and a REST API under
   `/api/plugins/maps/`.
 - When an object is deleted from NetBox, its markers leave every map.

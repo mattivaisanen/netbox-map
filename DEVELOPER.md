@@ -9,6 +9,7 @@ How the plugin is put together, and why.
   table, filter set and REST API base classes. No monkey-patching.
 - **No dependency on other plugins** and no Python packages beyond what
   NetBox installs. Images are read with Pillow, which NetBox already has.
+  Leaflet 1.9.4 is bundled in `assets/`; nothing is loaded from a CDN.
 - **NetBox's own tables are never changed.** Everything lives in the
   plugin's tables; NetBox objects are referred to by type and ID. Removing
   the plugin (after `prepare_map_uninstall`) leaves NetBox as it was.
@@ -20,6 +21,11 @@ How the plugin is put together, and why.
 |---|---|
 | `models.py` | `Map` (a NetBoxModel) and its change-logged parts `MapOverlay`, `MapMarker` and `MapShape`, with their validation. |
 | `images.py` | Overlay file checks: allowed types, unsafe SVG content, and reading the pixel size. |
+| `viewer.py` | Builds the JSON a map page hands to `map.js`: overlays, markers (with status color and icon), shapes, the user's rights and the API addresses. |
+| `assets.py`, `assets/` | Leaflet, `map.js` and `map.css`, served by the plugin itself. |
+| `assets/map.js` | Draws a map and runs the editor. |
+| `template_content.py` | **Show on map**, assigned maps on region/site/location pages, the rack's maps on rack pages. |
+| `templatetags/netbox_map.py` | `{% map_asset %}`: an asset's address with the plugin version. |
 | `signals.py` | Removes markers of deleted objects, clears the assignment of maps whose region/site/location was deleted, deletes overlay files. |
 | `views.py`, `forms.py`, `filtersets.py`, `tables.py`, `urls.py`, `navigation.py`, `search.py`, `api/` | Standard NetBox UI and REST API. |
 | `management/commands/prepare_map_uninstall.py` | Removes NetBox rows about maps that would break NetBox pages once the plugin is gone. |
@@ -70,6 +76,64 @@ in an SVG opened directly would run as the logged-in user.
 The pixel size is read on save when a new file comes in. Old files are
 deleted after the transaction commits, when an overlay is deleted or its
 image replaced.
+
+## Drawing the map
+
+`viewer.map_data()` collects what the browser needs, with the user's view
+permissions applied (a marker whose object the user can't see is left
+out). The page embeds it with `json_script` and calls
+`NetBoxMap.render(element, data, options)`.
+
+- **Coordinates:** stored as x/y, Leaflet wants `[lat, lng]` = `[y, x]`.
+  `toLatLng()` and `fromLatLng()` in `map.js` are the only conversions.
+- **Image-only maps** use `L.CRS.Simple`, so one map unit is one pixel of
+  the image. An overlay without corners is drawn at `[0, 0]`–`[height,
+  width]`.
+- **Fitting:** everything placed is added to one bounds and the map starts
+  with `fitBounds()`. A circle's bounds are worked out by hand, because
+  Leaflet needs the map's view to compute them and the view isn't set yet.
+  Permanent marker labels are bound after the view is set for the same
+  reason.
+- **Status colors:** markers use NetBox's own `text-bg-<color>` classes
+  with the object's `get_status_color()`, so they match its badges and
+  follow light and dark mode.
+- `?marker=<id>` highlights one marker and zooms to it; **Show on map**
+  links use it.
+
+## Assets without collectstatic
+
+Leaflet and `map.js` are served by `assets.asset()` from the package
+folder, not as Django static files. Static files only reach NetBox's web
+server through `collectstatic`, which a plugin installed into, or mounted
+into, a container image after it was built never gets. The view serves a
+fixed list of files with a week of browser caching; `{% map_asset %}` adds
+`?v=<plugin version>` so an upgrade loads the new files.
+
+## The editor
+
+The editor saves through NetBox's REST API with the user's session, so
+permissions, validation and change logging are exactly NetBox's. NetBox's
+CSRF cookie is HttpOnly, so the token comes in the page data.
+
+- Dragging a marker, overlay corner or overlay middle sends a `PATCH` on
+  drag end.
+- Drawing collects clicks and sends a `POST` to `shapes/` when finished,
+  then reloads the page. A double-click adds its point twice; repeats are
+  dropped.
+- **Add marker** sends the user to the normal marker form with `map`, `x`
+  and `y` filled in (NetBox fills form fields from the query string), so
+  picking any object type works the same as everywhere else in NetBox.
+
+## Other pages
+
+`template_content.py` adds:
+
+- `ShowOnMap.buttons()` on every object page (`models = None`). One query
+  for the object's markers; a device or anything with `rack`, `location` or
+  `site` falls back to those, in that order.
+- `AssignedMaps.full_width_page()` on region, site group, site and location
+  pages, and `RackMaps.right_page()` on rack pages, each a small read-only
+  map.
 
 ## Tests
 

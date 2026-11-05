@@ -1,0 +1,23 @@
+{% load i18n %}
+{# A small read-only map in a card, for other objects' pages. #}
+{% include 'netbox_map/inc/map_assets.html' %}
+{% for entry in embeds %}
+  <div class="card">
+    <h2 class="card-header">
+      {% trans "Map" %}: {{ entry.map.name }}
+      <div class="card-actions">
+        <a href="{{ entry.open_url }}" class="btn btn-ghost-primary btn-sm">
+          <i class="mdi mdi-arrow-expand" aria-hidden="true"></i> {% trans "Open map" %}
+        </a>
+      </div>
+    </h2>
+    <div id="nbm-embed-{{ entry.map.pk }}" class="nbm-map nbm-compact"></div>
+    {{ entry.data|json_script:entry.data_id }}
+    <script>
+      NetBoxMap.render(
+        document.getElementById('nbm-embed-{{ entry.map.pk }}'),
+        JSON.parse(document.getElementById('{{ entry.data_id }}').textContent)
+      );
+    </script>
+  </div>
+{% endfor %}

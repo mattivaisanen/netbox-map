@@ -4,7 +4,7 @@ from netbox.object_actions import AddObject, BulkDelete, BulkExport
 from netbox.views import generic
 from utilities.views import register_model_view
 
-from . import filtersets, forms, tables
+from . import filtersets, forms, tables, viewer
 from .models import Map, MapMarker, MapOverlay, MapShape
 
 
@@ -48,7 +48,17 @@ class MapView(generic.ObjectView):
                 'add_permission': f'{opts.app_label}.add_{opts.model_name}',
                 'add_field': field,
             })
-        return {'panels': panels}
+        # The map itself. ?edit=1 turns on the editor, ?marker=<id> zooms to one marker.
+        highlight = request.GET.get('marker')
+        data = viewer.map_data(instance, request, highlight=int(highlight) if str(highlight).isdigit() else None)
+        can_edit = any(data['can'].values())
+        return {
+            'panels': panels,
+            'map_data': data,
+            'can_edit': can_edit,
+            'editing': can_edit and request.GET.get('edit') == '1',
+            'unplaced_markers': [marker for marker in data['markers'] if marker['x'] is None],
+        }
 
 
 @register_model_view(Map, 'add', detail=False)
