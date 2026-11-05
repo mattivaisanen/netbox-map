@@ -19,11 +19,14 @@ class ShapeKindChoices(ChoiceSet):
     LINE = 'line'
     AREA = 'area'
     CIRCLE = 'circle'
+    # A point that cables run through, such as a manhole, cable well or pole.
+    JUNCTION = 'junction'
 
     CHOICES = (
         (LINE, _('Line')),
         (AREA, _('Area')),
         (CIRCLE, _('Circle')),
+        (JUNCTION, _('Junction')),
     )
 
 

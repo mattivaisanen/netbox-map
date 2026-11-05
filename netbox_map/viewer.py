@@ -205,6 +205,7 @@ def map_data(map_, request, highlight=None):
             {'x': map_.default_x, 'y': map_.default_y, 'zoom': map_.default_zoom} if map_.has_default_view else None
         ),
         'rotation': map_.rotation,
+        'layer_offsets': map_.layer_offsets or {},
         'place': _place(map_),
         'submaps': [
             {'name': child.name, 'url': child.get_absolute_url()}

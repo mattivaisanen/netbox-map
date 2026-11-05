@@ -56,6 +56,21 @@ New:
 - Shape levels: a line is dashed where it runs under an area or circle on
   a higher level, such as a cable under a street.
 - Racks are drawn as squares and map links as diamonds.
+- Junctions: points such as manholes, cable wells or poles that lines run
+  through. A line attaches to every marker and junction it is drawn
+  through, and follows them when they move. Lines between the same two
+  points run side by side, and more than eight are drawn as one bundle.
+  Resting the mouse on lines that run together, or on a junction, lists
+  the cables, bundles and circuits there.
+- Background layers can be lined up with each other by hand, per map:
+  **Line up** in the side panel while editing.
+- Lines and junctions take the mouse before areas, so a cable under a
+  street area can still be pointed at and clicked.
+- A cable route can be given its own color; until then it takes its
+  cable's color, or its status color.
+- Cards show sooner, and a card for lines that run together shows at once.
+- Fixed: hairline gaps between map tiles at half zoom steps.
+- Dashes under higher areas are longer, so they no longer look dotted.
 - When an object is deleted from NetBox, its markers leave every map.
 - `prepare_map_uninstall` removes NetBox's rows about maps before the plugin
   is uninstalled.

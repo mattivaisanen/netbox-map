@@ -39,6 +39,15 @@ class MapViewSettingsTests(TestCase):
         with self.assertRaises(ValidationError):
             make_map('Partial', default_x=24.9)
 
+    def test_layer_offsets_are_checked(self):
+        map_ = make_map()
+        map_.layer_offsets = {'Satellite': [1.5, -0.25]}
+        map_.full_clean()
+        for offsets in ({'Satellite': [1]}, {'Satellite': [5000, 0]}, ['Satellite']):
+            map_.layer_offsets = offsets
+            with self.subTest(offsets=offsets), self.assertRaises(ValidationError):
+                map_.full_clean()
+
     def test_rotation_is_limited(self):
         make_map('Turned', rotation=-45)
         with self.assertRaises(ValidationError):
@@ -133,6 +142,26 @@ class ShapeTests(TestCase):
                            (ShapeKindChoices.AREA, {'start': {'marker': marker.pk}})):
             with self.subTest(kind=kind), self.assertRaises(ValidationError):
                 MapShape(map=map_, kind=kind, points=[[0, 0], [1, 0], [1, 1]], ends=ends).full_clean()
+
+    def test_lines_run_through_junctions(self):
+        map_ = make_map()
+        junction = MapShape(map=map_, kind=ShapeKindChoices.JUNCTION, points=[[1, 1]])
+        junction.full_clean()
+        junction.save()
+        line = MapShape(map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [1, 1], [5, 5]],
+                        ends={'via': [{'point': 1, 'shape': junction.pk}]})
+        line.full_clean()
+        line.save()
+        junction.points = [[2, 0]]
+        junction.save()
+        line.refresh_from_db()
+        self.assertEqual(line.points, [[0, 0], [2, 0], [5, 5]])
+        # A junction is one point; "via" only names points in between.
+        with self.assertRaises(ValidationError):
+            MapShape(map=map_, kind=ShapeKindChoices.JUNCTION, points=[[0, 0], [1, 1]]).full_clean()
+        for via in ([{'point': 0, 'shape': 1}], [{'point': 1}], {'point': 1, 'shape': 1}):
+            with self.subTest(via=via), self.assertRaises(ValidationError):
+                MapShape(map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [1, 1], [2, 2]], ends={'via': via}).full_clean()
 
     def test_form_shows_radius_only_for_circles(self):
         map_ = make_map()

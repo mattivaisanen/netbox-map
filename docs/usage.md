@@ -19,8 +19,12 @@ The button under them goes back to the start view.
   [configuration](configuration.md).
 - Click a marker for a link to its object. A diamond marker, or an area
   that opens a map, takes you to that map.
-- Cable routes are thick lines in the cable's color, or its status color
-  when it has none.
+- Cable routes are thick lines in their own color when they have been
+  given one, else the cable's color, else its status color.
+- Lines that run between the same two markers or junctions are drawn side
+  by side; more than eight are drawn as one thick bundle. Resting the mouse
+  on them, or on a junction, lists the cables, bundles and circuits there
+  and lights them up.
 - On a turned map an arrow in the top-right corner points north.
 - **↑ parent** in the card header goes up to the parent map.
 
@@ -32,7 +36,10 @@ corner shows or hides it) has:
 - **Location:** the parent maps and the region, site or location the map
   is assigned to, as links.
 - **Background:** on a world map, the background to show, such as
-  Standard or Satellite.
+  Standard or Satellite. While editing, **Line up** moves the background
+  shown: drag the map until it lines up with the others, which are often a
+  few meters apart. **Reset** puts it back. Saved for this map, for
+  everyone.
 - **Show:** switches to hide devices, racks, map links, labels, cables,
   areas, lines, circles or images.
 - **Maps:** submaps and the maps this one links to.
@@ -57,10 +64,12 @@ it off. Everything is saved as you go.
 | Draw a line or an area | **Line** or **Area**, click the points, then **Finish** or double-click the last point. A dashed line shows where the next click goes. **Undo** (or Backspace) removes the last point. |
 | Draw a circle | **Circle**, click the center, then a point on the edge. |
 | Draw a cable route | **Cable**, click the points along the route, **Finish**, then pick the cable, cable bundle or circuit it belongs to. |
-| Attach a line's end to something | While drawing a line or cable, click on a marker (a ring shows it snaps), or on the edge of an area or circle. An end on a marker follows the marker when it is moved. |
+| Add a junction | **Junction**, then click the spot. A junction is a point lines run through, such as a manhole, cable well or pole. |
+| Attach a line to something | While drawing a line or cable, click on a marker or junction (a ring shows it snaps), or on the edge of an area or circle. This works for every point, not just the ends: a cable drawn through a junction runs through it. Attached points follow when the marker or junction moves. |
 | Jump to a place (world maps) | Type a city, an address, or a latitude and longitude such as `48.85, 2.35` in the box at the top right, then Enter. When several places match, pick one from the list. |
 | Move a shape's points | Click the shape, then **Edit points**. Drag a point to move it, drag a small midpoint to add one, right-click a point to remove it. Click the map when done. |
 | Move or resize a circle | Click it, then **Move or resize**, and drag the middle or the edge. |
+| Move a junction | Click it, then **Move**, and drag it. Lines through it follow. |
 | Label a shape, change its color or level, make an area open another map, or change a line's cable | Click the shape, then **Label, color, link** (**Label, color, route** on a line). |
 | Delete a shape | Click it, then **Delete**. |
 | Set where the map opens | Move and zoom the map, then **Set start view**. **Clear start view** goes back to fitting everything. |
@@ -138,8 +147,9 @@ is deleted from NetBox, its markers are removed from every map.
 
 ## Shapes
 
-A shape is a **line**, an **area** or a **circle**, with an optional label
-and a color. Shapes are drawn and reshaped on the map itself; the shape's
+A shape is a **line**, an **area**, a **circle** or a **junction**, with an
+optional label and a color. A junction is a point that lines run through,
+such as a manhole, cable well or pole. Shapes are drawn and reshaped on the map itself; the shape's
 form only changes its label, color, link and (for a circle) radius.
 
 **Level** is below ground, ground or above ground. A line is drawn
@@ -147,21 +157,24 @@ dashed where it runs under an area or circle on a higher level: draw a
 street as an area on *Above ground*, and cables crossing it are dashed
 there. Higher areas are also drawn over lower ones.
 
-**Ends** (lines only): a line's first and last points can be attached to a
-marker, or to an area or circle, by clicking on it while drawing. Lines
-attached to the same two things are drawn side by side instead of on top
-of each other. This is only on the map: nothing is connected in NetBox.
+**Ends** (lines only): a line's points can be attached to a marker or a
+junction, and its first and last points also to an area or circle, by
+clicking on it while drawing. Between two attached points, lines attached
+to the same two things are drawn side by side instead of on top of each
+other. This is only on the map: nothing is connected in NetBox.
 
 **Route of** (lines only) ties the line to a cable, cable bundle or
 circuit. The line then shows that object's card and colors. When the
 object is deleted from NetBox, the line stays as a plain line.
 
-**Opens map** (areas and circles) makes the shape a link: clicking it opens that map, the same
+**Opens map** (areas, circles and junctions) makes the shape a link: clicking it opens that map, the same
 as a map marker. Use it to make a building outline on a campus map lead to
 the building's own map.
 
 In the REST API, points are a list of `[x, y]` pairs: at least two for a
-line, three for an area, and one (the center) for a circle. A circle's
+line, three for an area, and one for a circle (its center) or a junction.
+`ends` is `{"start": {"marker": 1}, "end": {"shape": 2}, "via": [{"point": 1, "shape": 3}]}`,
+where `via` lists points in between by their index. A circle's
 radius is in meters on a world map and in pixels on an image-only map.
 
 ## Positions

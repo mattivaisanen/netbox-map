@@ -17,6 +17,9 @@
       <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="circle">
         <i class="mdi mdi-vector-circle" aria-hidden="true"></i> {% trans "Circle" %}
       </button>
+      <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="junction" title="{% trans 'A manhole, cable well, pole or other point that cables run through' %}">
+        <i class="mdi mdi-circle-double" aria-hidden="true"></i> {% trans "Junction" %}
+      </button>
       {% if map_data.search.cable or map_data.search.cablebundle or map_data.search.circuit %}
         <button type="button" class="btn btn-sm btn-outline-primary" data-nbm-draw="cable" title="{% trans 'Draw the route of a cable, cable bundle or circuit' %}">
           <i class="mdi mdi-cable-data" aria-hidden="true"></i> {% trans "Cable" %}

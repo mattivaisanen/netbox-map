@@ -11,7 +11,7 @@ database doesn't remove them by itself. When such an object is deleted:
 Overlay image files are deleted from storage with their overlay, and when
 a new file replaces them.
 
-A line whose end is attached to a marker follows the marker when it moves.
+A line attached to a marker or junction follows it when it moves.
 """
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -19,6 +19,7 @@ from django.db.models import Q
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
+from .choices import ShapeKindChoices
 from .models import MAP_SCOPE_TYPES, Map, MapMarker, MapOverlay, MapShape
 
 # Deleting these never concerns a map: NetBox bookkeeping and the map's own
@@ -66,25 +67,46 @@ def overlay_replaced(sender, instance, raw=False, **kwargs):
         _remove_file(old, instance.image.storage)
 
 
-@receiver(post_save, sender=MapMarker)
-def marker_moved(sender, instance, raw=False, **kwargs):
-    """Moves the attached ends of lines to the marker's new position."""
-    if raw or instance.x is None or instance.y is None:
-        return
-    lines = MapShape.objects.filter(map_id=instance.map_id).filter(
-        Q(ends__start__marker=instance.pk) | Q(ends__end__marker=instance.pk)
+def _follow(map_id, kind, pk, position):
+    """
+    Moves the points of lines attached to a marker or junction (`kind` is
+    'marker' or 'shape') to its new position: the start, the end and any
+    point the line runs through.
+    """
+    lines = MapShape.objects.filter(map_id=map_id, kind=ShapeKindChoices.LINE).filter(
+        Q(**{f'ends__start__{kind}': pk}) | Q(**{f'ends__end__{kind}': pk})
+        | Q(ends__via__contains=[{kind: pk}])
     )
     for line in lines:
         points = [list(point) for point in line.points]
         if not points:
             continue
-        position = [instance.x, instance.y]
+        indexes = [index for end, index in (('start', 0), ('end', len(points) - 1))
+                   if (line.ends.get(end) or {}).get(kind) == pk]
+        indexes += [via['point'] for via in line.ends.get('via') or []
+                    if via.get(kind) == pk and 0 <= via['point'] < len(points)]
         changed = False
-        for end, index in (('start', 0), ('end', -1)):
-            if (line.ends.get(end) or {}).get('marker') == instance.pk and points[index] != position:
-                points[index] = position
+        for index in indexes:
+            if points[index] != position:
+                points[index] = list(position)
                 changed = True
         if changed:
             line.snapshot()
             line.points = points
             line.save()
+
+
+@receiver(post_save, sender=MapMarker)
+def marker_moved(sender, instance, raw=False, **kwargs):
+    """Lines attached to a marker follow it."""
+    if raw or instance.x is None or instance.y is None:
+        return
+    _follow(instance.map_id, 'marker', instance.pk, [instance.x, instance.y])
+
+
+@receiver(post_save, sender=MapShape)
+def junction_moved(sender, instance, raw=False, **kwargs):
+    """Lines running through a junction follow it."""
+    if raw or instance.kind != ShapeKindChoices.JUNCTION or len(instance.points or []) != 1:
+        return
+    _follow(instance.map_id, 'shape', instance.pk, list(instance.points[0]))

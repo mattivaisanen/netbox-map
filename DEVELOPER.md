@@ -50,7 +50,8 @@ How the plugin is put together, and why.
   mean "not placed yet", so objects can be added from forms or the API
   first and placed on the map later.
 - **Shapes** store their points as a JSON list of `[x, y]` pairs. A circle is
-  one point and a radius. `MapShape.clean()` checks the structure.
+  one point and a radius, a junction one point. `MapShape.clean()` checks
+  the structure, including `ends`.
 
 ## Markers and deleted objects
 
@@ -109,8 +110,14 @@ out). The page embeds it with `json_script` and calls
   at x.5 it shows the next level's tiles slightly shrunk, which stays
   sharp; at quarter steps tiles would be stretched and blurred. Image-only
   maps keep quarter steps.
-- **Background layers:** one Leaflet tile layer per `base_layers` entry,
-  one shown at a time (`setBaseLayer()`). The choice is kept in
+- **Background layers:** one `MapTileLayer` per `base_layers` entry,
+  one shown at a time (`setBaseLayer()`). Tiles are drawn one pixel larger
+  than they are: at half zoom steps the browser rounds their edges and
+  would leave hairline gaps. `Map.layer_offsets` (`{name: [east, north]}`
+  in meters) moves a layer to line up with the others: `setOffset()` turns
+  meters into pixels at the tile zoom and adds them to each tile's
+  position, and the tiles to load are worked out for the view moved back
+  by the same amount. The choice is kept in
   `localStorage`, like the sidebar's switches; storage errors are ignored.
 - **Start view:** `default_x`, `default_y` and `default_zoom` on the map,
   set together or not at all. The fit button goes back to it.
@@ -138,9 +145,9 @@ origin. Markers, shapes, popups, dragging and clicks all go through the
 CRS and need nothing more. Three things assume pixels run straight across
 and get small subclasses:
 
-- `TurnedTileLayer`: the visible area is turned back to pick tiles, each
-  tile is placed at its turned corner and rotated with CSS. Tiles are
-  drawn one pixel larger to hide seams. The tile grid is fixed at
+- `TurnedTileLayer` (a `MapTileLayer`): the visible area is turned back to
+  pick tiles, each tile is placed at its turned corner and rotated with
+  CSS. The tile grid is fixed at
   `2^zoom` tiles across, with the usual wrapping in longitude.
 - `TurnedImageOverlay`: placed by its top-left corner with a CSS
   translate and rotate, during zoom animation too.
@@ -155,9 +162,11 @@ corners of the area, not two.
 `markers/<id>/card/` and `shapes/<id>/card/` render
 `inc/hover_card.html` from `cards.card_context()`. It uses NetBox's own
 `card` and `attr-table` classes, so it follows NetBox's theme and any
-theme plugin. `map.js` fetches it after the mouse rests on a marker or a
-route for 200 ms, keeps it, and places it beside the marker (or the mouse,
-on a line) inside the map. The card stays open while the mouse is on it,
+theme plugin. `map.js` starts fetching it when the mouse arrives, shows it
+after the mouse rests for 150 ms, keeps it, and places it beside the marker
+(or the mouse, on a line) inside the map. Cards for bundles and junctions
+(`listCard()`) are built in the browser from the page data, so they need
+no request. The card stays open while the mouse is on it,
 so its links can be clicked, and closes 300 ms after the mouse leaves.
 
 A rack's card puts an `<img>` of NetBox's own elevation SVG
@@ -170,17 +179,28 @@ Each line is two things in `map.js` (see "Lines" there): a see-through
 `HitLine` that takes the mouse, and the drawn pieces (`OffsetLine`) in a
 layer group that comes and goes with it. `linePieces()` cuts the line where
 it crosses the outline of a higher-`level` area or circle (in zoom-0
-pixels) and dashes the pieces inside. `assignLanes()` groups lines whose
-`ends` are attached to the same two things and gives each a lane;
-`OffsetLine` moves its projected points sideways by lane × width, with
-mitred corners. Pieces are recomputed when a line or an area changes.
+pixels) and dashes the pieces inside. `assignLanes()` splits each line into spans at its attached points ("anchors") and gives
+lines spanning the same two anchors a lane each; `OffsetLine` moves the
+projected points of a span sideways by lane × `LANE` px, with mitred
+corners. Over `BUNDLE_AT` lines in one span are drawn once, as a bundle.
+Junctions grow to cover the lane changes inside them. Pieces are
+recomputed when a line or an area changes (`relayout()` when the number
+of points changes).
 
-`MapShape.ends` is `{"start": {"marker": id}, "end": {"shape": id}}`. While
-drawing, `snapped()` puts a click on a marker within 14 px, or on the
-nearest point of an area's or circle's outline. Markers ignore the mouse
-while a tool is on (`nbm-tool-on`) so the click reaches the map. When a
-marker is saved, `signals.marker_moved` moves the attached ends (change
-logged); the editor moves them live during the drag (`followMarker()`).
+`MapShape.ends` is `{"start": {...}, "end": {...}, "via": [{"point": i,
+...}]}`, each target `{"marker": id}` or `{"shape": id}`. While drawing,
+`snapTarget()` puts a click on a marker or junction within 22 px, or on the
+nearest point of an area's or circle's outline within 14 px. Markers and
+shapes ignore the mouse while a tool is on (`nbm-tool-on`) so the click
+reaches the map. Reshaping a line keeps `ends` in step (`setAnchor()`,
+`shiftAnchors()`): a dragged point attaches to what it is dropped on, or
+comes loose. When a marker or junction is saved, `signals._follow` moves
+the attached points (change logged); the editor moves them live during
+the drag (`followAnchor()`).
+
+Panes, bottom up: images (overlay pane), `nbmAreas`, `nbmHalo` (the light
+behind hovered lines), `nbmLines`, `nbmJunctions`, markers. Lines above
+areas also get the mouse first.
 
 ## Cable routes
 
@@ -188,7 +208,8 @@ A route is a `MapShape` line with a generic relation (`object`) limited to
 cables, cable bundles and circuits (`ROUTE_TYPES`). **Cable** in the editor
 draws a line, then `pickRoute()` searches the three types through the REST
 API. A deleted cable leaves its line in place without the relation
-(`signals.object_deleted`). Lines are drawn in the cable's color, or with an
+(`signals.object_deleted`). Lines are drawn in their own color when it
+isn't the default (`DEFAULT_COLOR`), else the cable's color, else with an
 `nbm-route-<status color>` class whose CSS uses NetBox's color variables.
 
 ## Assets without collectstatic

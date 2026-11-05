@@ -78,6 +78,9 @@ class Map(NetBoxModel):
         validators=(MinValueValidator(-360), MaxValueValidator(360)),
         help_text=_('Degrees the map is turned clockwise. 0 keeps north up, 90 puts north on the right.'),
     )
+    # How far each background layer is moved to line up with the others,
+    # by layer name: {"Satellite": [east, north]} in meters.
+    layer_offsets = models.JSONField(verbose_name=_('layer offsets'), default=dict, blank=True)
 
     clone_fields = ('parent', 'base_layer', 'scope_type', 'scope_id', 'rotation')
 
@@ -108,6 +111,15 @@ class Map(NetBoxModel):
         view = (self.default_x, self.default_y, self.default_zoom)
         if any(value is not None for value in view) and None in view:
             raise ValidationError(_('Give the default position and zoom together, or none of them.'))
+        offsets = self.layer_offsets
+        if offsets and not (isinstance(offsets, dict) and all(
+            isinstance(name, str) and isinstance(offset, list) and len(offset) == 2
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) <= 1000 for v in offset)
+            for name, offset in offsets.items()
+        )):
+            raise ValidationError({'layer_offsets': _(
+                'Layer offsets look like {"Satellite": [1.5, -0.5]}: meters east and north, at most 1000.'
+            )})
 
     @property
     def has_default_view(self):
@@ -254,10 +266,11 @@ class MapMarker(ChangeLoggedModel):
 
 class MapShape(ChangeLoggedModel):
     """
-    A line, area or circle drawn on a map, such as a room outline or a cable
-    route. Lines and areas are a list of [x, y] points; a circle is one
-    point (its center) and a radius, in meters on a world map and pixels on
-    an image-only map.
+    A line, area, circle or junction drawn on a map, such as a room outline,
+    a cable route or a manhole. Lines and areas are a list of [x, y] points;
+    a circle is one point (its center) and a radius, in meters on a world map
+    and pixels on an image-only map. A junction is one point that lines run
+    through.
     """
     map = models.ForeignKey(to=Map, verbose_name=_('map'), on_delete=models.CASCADE, related_name='shapes')
     kind = models.CharField(verbose_name=_('kind'), max_length=20, choices=ShapeKindChoices)
@@ -280,9 +293,11 @@ class MapShape(ChangeLoggedModel):
         verbose_name=_('level'), choices=ShapeLevelChoices, default=ShapeLevelChoices.GROUND,
         help_text=_('A line is drawn dashed where it runs under an area or circle on a higher level.'),
     )
-    # What a line's ends are attached to on the map, so they follow when it
-    # moves: {"start": {"marker": <id>}, "end": {"shape": <id>}}. Only on the
-    # map: nothing is connected in NetBox.
+    # What a line's points are attached to on the map, so they follow when it
+    # moves: {"start": {"marker": <id>}, "end": {"shape": <id>}, "via":
+    # [{"point": <index>, "shape": <id>}]}. "via" holds points in between, such
+    # as junctions the line runs through. Only on the map: nothing is
+    # connected in NetBox.
     ends = models.JSONField(verbose_name=_('ends'), default=dict, blank=True)
 
     class Meta:
@@ -311,6 +326,8 @@ class MapShape(ChangeLoggedModel):
             raise ValidationError({'points': _('A {kind} needs at least {count} points.').format(
                 kind=self.get_kind_display().lower(), count=least,
             )})
+        if self.kind == ShapeKindChoices.JUNCTION and len(points) != 1:
+            raise ValidationError({'points': _('A junction has one point.')})
         if self.kind == ShapeKindChoices.CIRCLE:
             if len(points) != 1:
                 raise ValidationError({'points': _('A circle has one point, its center.')})
@@ -328,12 +345,35 @@ class MapShape(ChangeLoggedModel):
             if (self.object_type.app_label, self.object_type.model) not in ROUTE_MODELS:
                 raise ValidationError({'object': _('A line can be the route of a cable, cable bundle or circuit.')})
         if self.ends:
-            valid = isinstance(self.ends, dict) and all(
-                end in ('start', 'end') and isinstance(target, dict) and len(target) == 1
-                and next(iter(target)) in ('marker', 'shape') and isinstance(next(iter(target.values())), int)
-                for end, target in self.ends.items()
-            )
-            if not valid:
-                raise ValidationError({'ends': _('Ends look like {"start": {"marker": 1}, "end": {"shape": 2}}.')})
+            if not self._valid_ends(len(points)):
+                raise ValidationError({'ends': _(
+                    'Ends look like {"start": {"marker": 1}, "end": {"shape": 2}, "via": [{"point": 1, "shape": 3}]}.'
+                )})
             if self.kind != ShapeKindChoices.LINE:
                 raise ValidationError({'ends': _('Only a line has ends.')})
+
+    def _valid_ends(self, count):
+        """Whether `ends` has the shape described on the field, for a line of `count` points."""
+        def target(value, extra=()):
+            keys = set(value) - set(extra) if isinstance(value, dict) else None
+            return (
+                keys is not None and len(keys) == 1 and next(iter(keys)) in ('marker', 'shape')
+                and isinstance(value[next(iter(keys))], int)
+            )
+
+        if not isinstance(self.ends, dict):
+            return False
+        for name, value in self.ends.items():
+            if name in ('start', 'end'):
+                if not target(value):
+                    return False
+            elif name == 'via':
+                if not isinstance(value, list) or not all(
+                    target(item, extra=('point',)) and isinstance(item.get('point'), int)
+                    and 0 < item['point'] < count - 1
+                    for item in value
+                ):
+                    return False
+            else:
+                return False
+        return True

@@ -24,7 +24,8 @@ turn a map so it matches how the building is laid out.
   locations, power panels, circuits, and other maps. A marker for another
   map opens that map. A marker can also be just a text label.
 - **Shapes:** lines, areas and circles, for room outlines or coverage
-  areas.
+  areas, and junctions (manholes, cable wells, poles) that cables run
+  through.
 - **Cable routes:** lines tied to a NetBox cable, cable bundle or circuit,
   showing where it runs. An area can open another map, so clicking a building
   outline takes you to the building.

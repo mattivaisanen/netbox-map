@@ -91,3 +91,9 @@
 
 /* While a tool is on, clicks also pass through markers; the editor snaps line ends to them instead. */
 .nbm-tool-on .leaflet-marker-icon:not(.nbm-handle) { pointer-events: none; }
+
+/* Junctions: a ring that lines run through. */
+.nbm-map path.nbm-junction { fill: var(--tblr-bg-surface, #fff); }
+.nbm-map path.nbm-bundle { stroke: var(--tblr-gray-600, #5f6b7a); }
+.nbm-card-list { max-height: 16rem; overflow-y: auto; }
+.nbm-card-list .list-group-item { background: transparent; }

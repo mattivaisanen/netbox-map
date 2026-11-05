@@ -23,7 +23,7 @@ class MapSerializer(NetBoxModelSerializer):
         model = Map
         fields = (
             'id', 'url', 'display_url', 'display', 'name', 'parent', 'base_layer', 'scope_type', 'scope_id', 'scope',
-            'default_x', 'default_y', 'default_zoom', 'rotation', 'description', 'comments', 'tags', 'custom_fields', 'created',
+            'default_x', 'default_y', 'default_zoom', 'rotation', 'layer_offsets', 'description', 'comments', 'tags', 'custom_fields', 'created',
             'last_updated',
         )
         brief_fields = ('id', 'url', 'display', 'name', 'description')
