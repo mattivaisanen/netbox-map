@@ -1,0 +1,22 @@
+{% load i18n %}
+{% load render_table from django_tables2 %}
+{# One list on the map page (submaps, markers, ...), with a button to add one to this map. #}
+<div class="card">
+  <h2 class="card-header">
+    {{ panel.heading }}
+    {% if panel.add_permission in perms %}
+      <div class="card-actions">
+        <a href="{% url panel.add_url %}?{{ panel.add_field }}={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-ghost-primary btn-sm">
+          <i class="mdi mdi-plus-thick" aria-hidden="true"></i> {% trans "Add" %}
+        </a>
+      </div>
+    {% endif %}
+  </h2>
+  {% if panel.table.rows %}
+    <div class="table-responsive">
+      {% render_table panel.table 'inc/table.html' %}
+    </div>
+  {% else %}
+    <div class="card-body text-muted">{% trans "None" %}</div>
+  {% endif %}
+</div>

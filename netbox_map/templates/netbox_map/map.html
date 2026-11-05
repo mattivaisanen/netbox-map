@@ -1,0 +1,42 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load plugins %}
+{% load i18n %}
+{% load render_table from django_tables2 %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col col-md-6">
+    <div class="card">
+      <h2 class="card-header">{% trans "Map" %}</h2>
+      <table class="table table-hover attr-table">
+        <tr><th scope="row">{% trans "Name" %}</th><td>{{ object.name }}</td></tr>
+        <tr><th scope="row">{% trans "Parent" %}</th><td>{{ object.parent|linkify|placeholder }}</td></tr>
+        <tr><th scope="row">{% trans "Base layer" %}</th><td>{{ object.get_base_layer_display }}</td></tr>
+        <tr>
+          <th scope="row">{% trans "Assigned to" %}</th>
+          <td>
+            {% if object.scope %}{{ object.scope_type.name|bettertitle }}: {{ object.scope|linkify }}{% else %}{{ ''|placeholder }}{% endif %}
+          </td>
+        </tr>
+        <tr><th scope="row">{% trans "Description" %}</th><td>{{ object.description|placeholder }}</td></tr>
+      </table>
+    </div>
+    {% include 'inc/panels/tags.html' %}
+    {% plugin_left_page object %}
+  </div>
+  <div class="col col-md-6">
+    {% include 'inc/panels/comments.html' %}
+    {% include 'inc/panels/custom_fields.html' %}
+    {% plugin_right_page object %}
+  </div>
+</div>
+<div class="row">
+  <div class="col col-md-12">
+    {% for panel in panels %}
+      {% include 'netbox_map/inc/part_panel.html' %}
+    {% endfor %}
+    {% plugin_full_width_page object %}
+  </div>
+</div>
+{% endblock %}
