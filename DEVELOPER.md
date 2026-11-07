@@ -127,6 +127,14 @@ out). The page embeds it with `json_script` and calls
   policy forbids search-as-you-type, so suggestions are the up to five
   results of that one search.
 
+- **Default colors** (`default_colors`, read by `viewer.default_colors()`):
+  a marker without a color takes its kind's default before its status
+  color; a shape still in the color new shapes get (`DEFAULT_COLOR`) takes
+  its kind's default.
+- **Maps page:** `MapListView` renders NetBox's table or, with `?view=grid`,
+  cards (`inc/map_card.html`) of the filtered maps. The choice is kept in
+  the user's NetBox preferences (`plugins.netbox_map.maps_view`).
+
 ## Side panel
 
 `buildSidebar()` fills the `<aside>` beside the map on the map's own page
@@ -197,6 +205,16 @@ reaches the map. Reshaping a line keeps `ends` in step (`setAnchor()`,
 comes loose. When a marker or junction is saved, `signals._follow` moves
 the attached points (change logged); the editor moves them live during
 the drag (`followAnchor()`).
+
+**Curves:** `MapShape.smooth` lists the points a line bends smoothly
+through. `linePath()` turns the points into the drawn path: a cubic
+Hermite piece per segment in zoom-0 pixels, with Catmull-Rom tangents at
+smooth points and the chord at sharp ones (so sharp-to-sharp stays
+straight), plus `index` from each point to its place in the path. Spans,
+dashes, halos and the hit line (`HitLine.nbmPath`) all use the path.
+Reshaping keeps `smooth` in step (`shiftIndexes()`), and `shareSpans()`
+copies a reshaped line's points and curves between two anchors to the
+other lines there; `adoptPaths()` does the same for a newly drawn line.
 
 Panes, bottom up: images (overlay pane), `nbmAreas`, `nbmHalo` (the light
 behind hovered lines), `nbmLines`, `nbmJunctions`, markers. Lines above

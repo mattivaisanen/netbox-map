@@ -1,0 +1,26 @@
+{% load i18n %}
+{# One map in the maps grid: its first image (or an icon), name, place and contents. #}
+<div class="col-sm-6 col-lg-4 col-xl-3">
+  <div class="card card-sm nbm-map-card h-100">
+    <a href="{{ map.get_absolute_url }}" class="nbm-map-thumb">
+      {% with overlay=map.overlays.all.0 %}
+        {% if overlay %}
+          <img src="{{ overlay.image.url }}" alt="" loading="lazy">
+        {% else %}
+          <i class="mdi {% if map.base_layer == 'image' %}mdi-image-outline{% else %}mdi-earth{% endif %}" aria-hidden="true"></i>
+        {% endif %}
+      {% endwith %}
+    </a>
+    <div class="card-body">
+      <div class="fw-bold text-truncate"><a href="{{ map.get_absolute_url }}">{{ map.name }}</a></div>
+      <div class="text-secondary small text-truncate">
+        {% if map.parent %}{{ map.parent }}{% if map.scope %} · {% endif %}{% endif %}{% if map.scope %}{{ map.scope }}{% endif %}
+        {% if not map.parent and not map.scope %}{{ map.get_base_layer_display }}{% endif %}
+      </div>
+      <div class="text-secondary small mt-1">
+        <span title="{% trans 'Markers' %}"><i class="mdi mdi-map-marker-outline" aria-hidden="true"></i> {{ map.marker_count }}</span>
+        <span class="ms-2" title="{% trans 'Shapes' %}"><i class="mdi mdi-vector-polyline" aria-hidden="true"></i> {{ map.shape_count }}</span>
+      </div>
+    </div>
+  </div>
+</div>

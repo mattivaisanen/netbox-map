@@ -27,6 +27,8 @@
 
   // Set by render() from the page's data; NetBox's CSRF cookie can't be read from JavaScript.
   var csrfToken = '';
+  // The `default_colors` setting, {kind: '#rrggbb'}; also set by render().
+  var defaultColors = {};
 
   // One REST API call with the user's session. Resolves with the JSON
   // answer, rejects with NetBox's error text.
@@ -49,14 +51,17 @@
     window.alert('Saving failed: ' + error.message);
   }
 
-  // A round pin with an icon: the object's status color, or the marker's own color.
+  // A round pin with an icon: the marker's own color, else the default
+  // color for its kind of object (setting), else the object's status color.
   function markerIcon(marker, highlighted) {
+    var kind = { device: 'device', rack: 'rack', other: 'object' }[markerCategory(marker)];
+    var color = marker.color || defaultColors[kind];
     var classes = 'nbm-pin';
-    if (!marker.color) { classes += ' text-bg-' + (marker.status || 'primary'); }
+    if (!color) { classes += ' text-bg-' + (marker.status || 'primary'); }
     if (marker.map_link) { classes += ' nbm-pin-link'; }
     if (marker.square) { classes += ' nbm-pin-square'; }
     if (highlighted) { classes += ' nbm-pin-highlight'; }
-    var style = marker.color ? ' style="background-color:' + marker.color + ';color:#fff"' : '';
+    var style = color ? ' style="background-color:' + color + ';color:#fff"' : '';
     return L.divIcon({
       className: 'nbm-marker',
       html: '<span class="' + classes + '"' + style + '><i class="mdi mdi-' + escapeHtml(marker.icon) + '"></i></span>',
@@ -447,13 +452,70 @@
   // More lines than this between the same two anchors are drawn as one bundle.
   var BUNDLE_AT = 8;
 
+  // The see-through line. Its points are the line's own; when the line is
+  // curved, the mouse is caught along the curve (nbmPath) instead.
   var HitLine = L.Polyline.extend({
     setLatLngs: function (latlngs) {
       L.Polyline.prototype.setLatLngs.call(this, latlngs);
       if (this.nbmRedraw) { this.nbmRedraw(); }
       return this;
     },
+    _project: function () {
+      var own = this._latlngs;
+      if (this.nbmPath) { this._latlngs = this.nbmPath; }
+      L.Polyline.prototype._project.call(this);
+      this._latlngs = own;
+    },
   });
+
+  // Steps per curved piece of a line.
+  var CURVE_STEPS = 12;
+
+  // The path a line is drawn along: its points, with curves through its
+  // smooth points (`data.smooth`). Returns {latlngs, index}, where index[i]
+  // is where the line's point i is in latlngs. A curve is a cubic Hermite
+  // piece per segment, worked out in zoom-0 pixels: through a smooth point
+  // it keeps the direction from the point before to the point after
+  // (Catmull-Rom); at a sharp point it heads straight for its neighbor, so
+  // two sharp ends give a straight piece.
+  function linePath(state, entry) {
+    var latlngs = entry.layer.getLatLngs();
+    var n = latlngs.length;
+    var smooth = (entry.data.smooth || []).filter(function (i) { return i > 0 && i < n - 1; });
+    if (!smooth.length) {
+      return { latlngs: latlngs, index: latlngs.map(function (p, i) { return i; }) };
+    }
+    var map = state.map;
+    var p = latlngs.map(function (ll) { return map.project(ll, 0); });
+    function isSmooth(i) { return smooth.indexOf(i) >= 0; }
+    function tangent(i, leaving) {
+      if (isSmooth(i)) { return p[i + 1].subtract(p[i - 1]).multiplyBy(0.5); }
+      return leaving ? p[i + 1].subtract(p[i]) : p[i].subtract(p[i - 1]);
+    }
+    var path = [latlngs[0]];
+    var index = [0];
+    for (var i = 0; i < n - 1; i++) {
+      if (isSmooth(i) || isSmooth(i + 1)) {
+        var a = p[i], b = p[i + 1], ta = tangent(i, true), tb = tangent(i + 1, false);
+        for (var k = 1; k < CURVE_STEPS; k++) {
+          var t = k / CURVE_STEPS, t2 = t * t, t3 = t2 * t;
+          var h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+          path.push(map.unproject(L.point(
+            h00 * a.x + h10 * ta.x + h01 * b.x + h11 * tb.x,
+            h00 * a.y + h10 * ta.y + h01 * b.y + h11 * tb.y), 0));
+        }
+      }
+      path.push(latlngs[i + 1]);
+      index.push(path.length - 1);
+    }
+    return { latlngs: path, index: index };
+  }
+
+  // The drawn path of one span of a line.
+  function spanPath(entry, span) {
+    var path = entry.path;
+    return path.latlngs.slice(path.index[span.from], path.index[span.to] + 1);
+  }
 
   // A polyline drawn `offset` pixels to the left of its points.
   var OffsetLine = L.Polyline.extend({
@@ -496,20 +558,27 @@
     });
   }
 
-  // The color a new shape gets; a cable route keeps its cable's color until
-  // it is given another one.
+  // The color a new shape gets. A shape still in it is drawn in the default
+  // color for its kind when one is set, and a cable route in its cable's
+  // color, until it is given a color of its own.
   var DEFAULT_COLOR = '#2196f3';
 
+  function hasOwnColor(shape) { return !!shape.color && shape.color.toLowerCase() !== DEFAULT_COLOR; }
+
+  function shapeColor(shape) {
+    return hasOwnColor(shape) ? shape.color : (defaultColors[shape.kind] || shape.color);
+  }
+
   // Colors and width of a line. A cable route is drawn in its own color when
-  // it has been given one, else its cable's color, else its status color
-  // (through a class); other lines in their own color.
+  // it has been given one, else its cable's color, else the default cable
+  // color, else its status color (through a class); other lines in theirs.
   function lineStyle(shape) {
-    var style = { color: shape.color, weight: 3, className: '' };
+    var style = { color: shapeColor(shape), weight: 3, className: '' };
     if (shape.object) {
       style.weight = 5;
-      if (shape.color && shape.color.toLowerCase() !== DEFAULT_COLOR) { return style; }
-      style.color = shape.route_color || '#6c757d';
-      if (!shape.route_color && shape.status) { style.className = 'nbm-route nbm-route-' + shape.status; }
+      if (hasOwnColor(shape)) { return style; }
+      style.color = shape.route_color || defaultColors.cable || '#6c757d';
+      if (!shape.route_color && !defaultColors.cable && shape.status) { style.className = 'nbm-route nbm-route-' + shape.status; }
     }
     return style;
   }
@@ -697,12 +766,17 @@
 
   // Draws (again) what is seen of one line.
   function drawLine(state, entry) {
-    var latlngs = entry.layer.getLatLngs();
+    entry.path = linePath(state, entry);
+    var curved = entry.path.latlngs.length !== entry.layer.getLatLngs().length;
+    if (curved || entry.layer.nbmPath) {
+      entry.layer.nbmPath = curved ? entry.path.latlngs : null;
+      if (state.map.hasLayer(entry.layer)) { entry.layer.redraw(); }
+    }
     entry.visual.clearLayers();
     (entry.spans || []).forEach(function (span) {
       var style = spanStyle(entry, span);
       if (!style) { return; }
-      linePieces(state, entry, latlngs.slice(span.from, span.to + 1)).forEach(function (piece) {
+      linePieces(state, entry, spanPath(entry, span)).forEach(function (piece) {
         new OffsetLine(piece.latlngs, L.Util.extend({}, style, {
           interactive: false, pane: 'nbmLines', dashArray: piece.under ? dashes(style.weight) : null, lineCap: piece.under ? 'butt' : 'round',
         })).addTo(entry.visual);
@@ -730,11 +804,12 @@
   function spanAt(state, entry, latlng) {
     var map = state.map;
     var mouse = map.latLngToLayerPoint(latlng);
-    var points = entry.layer.getLatLngs().map(function (ll) { return map.latLngToLayerPoint(ll); });
+    var path = entry.path || linePath(state, entry);
+    var points = path.latlngs.map(function (ll) { return map.latLngToLayerPoint(ll); });
     var best = null;
     var nearest = Infinity;
     (entry.spans || []).forEach(function (span) {
-      for (var i = span.from; i < span.to; i++) {
+      for (var i = path.index[span.from]; i < path.index[span.to]; i++) {
         var distance = L.LineUtil.pointToSegmentDistance(mouse, points[i], points[i + 1]);
         if (distance < nearest) { nearest = distance; best = span; }
       }
@@ -812,8 +887,7 @@
     spans.forEach(function (member) {
       var style = spanStyle(member.entry, member.span);
       if (!style) { return; }
-      var latlngs = member.entry.layer.getLatLngs().slice(member.span.from, member.span.to + 1);
-      new OffsetLine(latlngs, {
+      new OffsetLine(spanPath(member.entry, member.span), {
         offset: style.offset, weight: style.weight + 8, color: '#ffc107', opacity: 0.55,
         interactive: false, pane: 'nbmHalo',
       }).addTo(state.halo);
@@ -889,6 +963,117 @@
     ends.via = (ends.via || []).filter(function (via) { return via.point !== index; });
     if (anchor) { ends.via.push(L.Util.extend({ point: index }, anchor)); }
     if (!ends.via.length) { delete ends.via; }
+  }
+
+  // Indexes in `list` after a point is added (change +1) or removed (-1) at `index`.
+  function shiftIndexes(list, index, change) {
+    return (list || [])
+      .filter(function (i) { return !(change < 0 && i === index); })
+      .map(function (i) { return i >= index ? i + change : i; });
+  }
+
+  // Every point in between, for a curved line of `count` points.
+  function allInner(count) {
+    var list = [];
+    for (var i = 1; i < count - 1; i++) { list.push(i); }
+    return list;
+  }
+
+  // A line as plain data: {points (latlngs), ends, smooth}.
+  function lineOf(entry) {
+    return { points: entry.layer.getLatLngs().slice(), ends: entry.data.ends || {}, smooth: entry.data.smooth || [] };
+  }
+
+  // The points strictly between `from` and `to` of a line, and which of them
+  // are smooth (counted from the first of them); reversed when asked.
+  function innerOf(line, from, to, reverse) {
+    var inner = line.points.slice(from + 1, to);
+    var smooth = line.smooth.filter(function (i) { return i > from && i < to; }).map(function (i) { return i - from - 1; });
+    if (reverse) {
+      inner.reverse();
+      smooth = smooth.map(function (i) { return inner.length - 1 - i; });
+    }
+    return { inner: inner, smooth: smooth };
+  }
+
+  // The line with its points strictly between `from` and `to` replaced by
+  // `part` (from innerOf), its attachments and smooth points kept in step.
+  function replaceInner(line, from, to, part) {
+    var change = part.inner.length - (to - from - 1);
+    var ends = JSON.parse(JSON.stringify(line.ends || {}));
+    if (ends.via) {
+      ends.via = ends.via
+        .filter(function (via) { return via.point <= from || via.point >= to; })
+        .map(function (via) { if (via.point >= to) { via.point += change; } return via; });
+      if (!ends.via.length) { delete ends.via; }
+    }
+    var smooth = line.smooth
+      .filter(function (i) { return i <= from || i >= to; })
+      .map(function (i) { return i >= to ? i + change : i; })
+      .concat(part.smooth.map(function (i) { return i + from + 1; }));
+    return { points: line.points.slice(0, from + 1).concat(part.inner, line.points.slice(to)), ends: ends, smooth: smooth };
+  }
+
+  // Lines that run between the same two anchors share one path there: after
+  // a line is reshaped, the others in its spans take its points (and
+  // curves) between those anchors. Returns the lines changed, to be saved.
+  function shareSpans(state, entry) {
+    var changed = [];
+    var keys = [];
+    (entry.spans || []).forEach(function (span) {
+      if (span.group && keys.indexOf(span.group) < 0) { keys.push(span.group); }
+    });
+    state.linesReady = false;
+    keys.forEach(function (key) {
+      assignLanes(state);   // spans as they are after the changes so far
+      var own = entry.spans.filter(function (span) { return span.group === key; })[0];
+      if (!own) { return; }
+      // Seen from the group's first anchor to its second.
+      var source = innerOf(lineOf(entry), own.from, own.to, own.sign < 0);
+      state.groups[key].forEach(function (member) {
+        if (member.entry === entry) { return; }
+        var other = member.entry;
+        var part = { inner: source.inner.slice(), smooth: source.smooth.slice() };
+        if (member.span.sign < 0) {
+          part.inner.reverse();
+          part.smooth = part.smooth.map(function (i) { return part.inner.length - 1 - i; });
+        }
+        var result = replaceInner(lineOf(other), member.span.from, member.span.to, part);
+        other.data.ends = result.ends;
+        other.data.smooth = result.smooth;
+        other.layer.setLatLngs(result.points);
+        if (changed.indexOf(other) < 0) { changed.push(other); }
+      });
+    });
+    state.linesReady = true;
+    relayout(state);
+    return changed;
+  }
+
+  // A new line between anchors that other lines already run between takes
+  // their path there. `line` is plain data (lineOf); returns the new data.
+  function adoptPaths(state, line) {
+    var count = line.points.length;
+    var anchors = [];
+    if (line.ends.start) { anchors.push({ index: 0, key: anchorKey(line.ends.start) }); }
+    (line.ends.via || []).forEach(function (via) { anchors.push({ index: via.point, key: anchorKey(via) }); });
+    if (line.ends.end) { anchors.push({ index: count - 1, key: anchorKey(line.ends.end) }); }
+    anchors.sort(function (a, b) { return a.index - b.index; });
+    // From the last span back, so earlier indexes stay put.
+    for (var i = anchors.length - 2; i >= 0; i--) {
+      var a = anchors[i], b = anchors[i + 1];
+      if (a.key === b.key) { continue; }
+      var group = state.groups[a.key < b.key ? a.key + '|' + b.key : b.key + '|' + a.key];
+      if (!group || !group.length) { continue; }
+      var leader = group[0];
+      var part = innerOf(lineOf(leader.entry), leader.span.from, leader.span.to, leader.span.sign < 0);
+      if (a.key > b.key) {
+        part.inner.reverse();
+        part.smooth = part.smooth.map(function (j) { return part.inner.length - 1 - j; });
+      }
+      line = replaceInner(line, a.index, b.index, part);
+    }
+    return line;
   }
 
   // Keeps `ends` right after a point is added (change +1) or removed (-1)
@@ -1002,6 +1187,7 @@
     options = options || {};
     var edit = !!options.edit;
     csrfToken = data.csrf_token || csrfToken;
+    defaultColors = data.default_colors || {};
     var layers = data.image_only ? [] : data.tiles.layers;
     // World maps zoom in half steps. Leaflet rounds to the nearest tile
     // level, so at a half step it shows the next level's tiles a little
@@ -1080,7 +1266,7 @@
     // Shapes, lower levels first, so higher areas are drawn over them.
     data.shapes.slice().sort(function (a, b) { return (a.level || 0) - (b.level || 0); }).forEach(function (shape) {
       var style = {
-        color: shape.color, weight: 3, fillOpacity: 0.2, pane: 'nbmAreas', className: shape.link_url ? 'nbm-shape-link' : '',
+        color: shapeColor(shape), weight: 3, fillOpacity: 0.2, pane: 'nbmAreas', className: shape.link_url ? 'nbm-shape-link' : '',
       };
       var points = shape.points.map(function (p) { return toLatLng(p[0], p[1]); });
       var layer;
@@ -1091,7 +1277,7 @@
       } else if (shape.kind === 'junction') {
         // A ring that lines run through; sizeJunctions() sets its size.
         layer = L.circleMarker(points[0], {
-          radius: 7, color: shape.color, weight: 3, fillOpacity: 1, pane: 'nbmJunctions', className: 'nbm-junction',
+          radius: 7, color: shapeColor(shape), weight: 3, fillOpacity: 1, pane: 'nbmJunctions', className: 'nbm-junction',
         });
       } else {
         // Seen through; drawLine() draws what is seen (see "Lines" above).
@@ -1132,7 +1318,6 @@
       }
       state.shapes[shape.id] = entry;
       var tooltip = shape.label || '';
-      if (shape.link_url) { tooltip += (tooltip ? ': ' : '') + 'opens ' + shape.link_name; }
       if (shape.kind === 'line') {
         // Lines show their cable's card, or the bundle they run in; plain
         // lines on their own show their label.
@@ -1144,7 +1329,9 @@
       } else if (shape.kind === 'junction') {
         hoverCard(state, layer, function () { return junctionCard(state, entry); });
       } else if (tooltip) {
-        layer.bindTooltip(escapeHtml(tooltip), { sticky: true });
+        // An area's or circle's label is always shown, in its middle (added
+        // once the view is set, like marker names).
+        entry.label = tooltip;
       }
       if (edit && (data.can.change_shape || data.can.delete_shape)) {
         var html = '<strong>' + escapeHtml(shape.label || shape.route_name || shape.kind) + '</strong><br>';
@@ -1205,6 +1392,14 @@
     // Names under the markers. Added once the view is set: a label that is
     // always shown needs the map's position to draw itself.
     Object.keys(state.markers).forEach(function (id) { addLabel(state.markers[id]); });
+    Object.keys(state.shapes).forEach(function (id) {
+      var entry = state.shapes[id];
+      if (entry.label) {
+        entry.layer.bindTooltip(escapeHtml(entry.label), {
+          permanent: true, direction: 'center', interactive: false, className: 'nbm-label nbm-area-label',
+        });
+      }
+    });
     state.ready = true;
 
     // The element may have been sized after the map started (cards, tabs).
@@ -1695,11 +1890,11 @@
       });
     });
 
-    function saveShape(kind, points, radius, ends) {
+    function saveShape(kind, points, radius, ends, smooth) {
       var label = window.prompt('Label for the ' + kind + ' (optional):', '');
       if (label === null) { stopTool(); return; }
       api('POST', data.api.shapes, {
-        map: data.id, kind: kind, label: label, points: points, radius: radius, ends: ends || {},
+        map: data.id, kind: kind, label: label, points: points, radius: radius, ends: ends || {}, smooth: smooth || [],
       }).then(reload, failed);
     }
 
@@ -1725,18 +1920,25 @@
         return;
       }
       var points = drawing.points.map(function (p) { return [p.lng, p.lat]; });
+      if (drawing.kind === 'area') {
+        saveShape('area', points);
+        return;
+      }
+      // Between anchors other lines already use, the new line takes their path.
+      var line = adoptPaths(state, { points: drawing.points.slice(), ends: drawnEnds(), smooth: [] });
+      points = line.points.map(function (p) { return [p.lng, p.lat]; });
       if (drawing.kind === 'cable') {
         // A cable route is a line tied to a cable, bundle or circuit.
         state.tool = null;
         say('Pick what this route is for.');
         pickRoute(state, drawing.points[drawing.points.length - 1], function (type, id) {
           api('POST', data.api.shapes, {
-            map: data.id, kind: 'line', points: points, object_type: type, object_id: id, ends: drawnEnds(),
+            map: data.id, kind: 'line', points: points, object_type: type, object_id: id, ends: line.ends, smooth: line.smooth,
           }).then(reload, failed);
         }, stopTool);
         return;
       }
-      saveShape(drawing.kind, points, null, drawing.kind === 'line' ? drawnEnds() : {});
+      saveShape('line', points, null, line.ends, line.smooth);
     }
 
     toolbar.querySelectorAll('[data-nbm-finish]').forEach(function (button) {
@@ -1826,6 +2028,11 @@
       if (state.tool && state.tool.draw && state.tool.draw !== 'circle' && state.tool.draw !== 'junction') { finishDrawing(); }
     });
 
+    // Whether Ctrl (or Cmd) is held, for curving lines while dragging.
+    document.addEventListener('keydown', function (event) { if (event.ctrlKey || event.metaKey) { state.ctrlDown = true; } });
+    document.addEventListener('keyup', function (event) { state.ctrlDown = event.ctrlKey || event.metaKey; });
+    window.addEventListener('blur', function () { state.ctrlDown = false; });
+
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && state.tool) { stopTool(); }
       var typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement && document.activeElement.tagName);
@@ -1865,12 +2072,14 @@
     say({
       circle: 'Drag the middle to move the circle, the edge handle to resize it. Click the map when done.',
       junction: 'Drag the junction to move it; lines through it follow. Click the map when done.',
-      line: 'Drag points to move them (onto a marker or junction to attach them), a small midpoint to add one, ' +
-        'right-click a point to remove it. Click the map when done.',
+      line: 'Drag points to move them (an end onto another marker or junction to connect it there), a small midpoint ' +
+        'to add a sharp turn, hold Ctrl while dragging to curve the whole line, right-click a point to remove it. ' +
+        'Click the map when done.',
     }[kind] || 'Drag points to move them, a small midpoint to add one, right-click a point to remove it. Click the map when done.');
 
     function handle(latlng, small) {
-      var h = L.marker(latlng, { draggable: true, icon: handleIcon(small ? 'mid' : 'corner') }).addTo(map);
+      // Above markers, so a line's end on a device can still be picked up.
+      var h = L.marker(latlng, { draggable: true, icon: handleIcon(small ? 'mid' : 'corner'), zIndexOffset: 2000 }).addTo(map);
       handles.push(h);
       return h;
     }
@@ -1918,6 +2127,13 @@
     var least = closed ? 3 : 2;
     // What a line's points are attached to; kept in step as points change.
     var ends = kind === 'line' ? (shape.data.ends = shape.data.ends || {}) : null;
+    var isLine = kind === 'line';
+    // Ctrl (or Cmd) held while dragging curves the whole line.
+    function curveAll(event) {
+      var original = event && event.originalEvent;
+      if (!isLine || !(state.ctrlDown || (original && (original.ctrlKey || original.metaKey)))) { return; }
+      shape.data.smooth = allInner(latlngs().length);
+    }
 
     function latlngs() {
       var points = layer.getLatLngs();
@@ -1926,11 +2142,19 @@
     function apply(points) { layer.setLatLngs(points); }
     function savePoints() {
       var fields = { points: latlngs().map(function (p) { return [p.lng, p.lat]; }) };
-      if (ends) {
-        fields.ends = ends;
-        relayout(state);
-      }
+      if (!isLine) { save(fields); return; }
+      fields.ends = ends;
+      fields.smooth = shape.data.smooth || [];
+      relayout(state);
       save(fields);
+      // Lines between the same two anchors take the same path.
+      shareSpans(state, shape).forEach(function (other) {
+        api('PATCH', data.api.shapes + other.data.id + '/', {
+          points: other.layer.getLatLngs().map(function (p) { return [p.lng, p.lat]; }),
+          ends: other.data.ends, smooth: other.data.smooth,
+        }).catch(failed);
+      });
+      ends = shape.data.ends;
     }
 
     function build() {
@@ -1938,9 +2162,10 @@
       var points = latlngs().slice();
       points.forEach(function (point, i) {
         var h = handle(point);
-        h.on('drag', function () {
+        h.on('drag', function (event) {
           var now = latlngs().slice();
           now[i] = h.getLatLng();
+          curveAll(event);
           apply(now);
         });
         h.on('dragend', function () {
@@ -1960,7 +2185,10 @@
           var now = latlngs().slice();
           if (now.length <= least) { say('A ' + kind + ' needs at least ' + least + ' points.'); return; }
           now.splice(i, 1);
-          if (ends) { shiftAnchors(ends, i, -1, now.length); }
+          if (ends) {
+            shiftAnchors(ends, i, -1, now.length);
+            shape.data.smooth = shiftIndexes(shape.data.smooth, i, -1).filter(function (j) { return j > 0 && j < now.length - 1; });
+          }
           apply(now);
           savePoints();
           build();
@@ -1972,11 +2200,22 @@
         (function (i) {
           var a = points[i];
           var b = points[(i + 1) % points.length];
-          var mid = handle(L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2), true);
-          mid.on('dragstart', function () { if (ends) { shiftAnchors(ends, i + 1, 1, points.length + 1); } });
-          mid.on('drag', function () {
+          // On a curve, halfway along the curved piece.
+          var at = L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2);
+          if (shape.path && shape.path.index[i + 1] - shape.path.index[i] > 1) {
+            at = shape.path.latlngs[Math.round((shape.path.index[i] + shape.path.index[i + 1]) / 2)];
+          }
+          var mid = handle(at, true);
+          // The new point is a sharp turn; with Ctrl held the whole line curves.
+          mid.on('dragstart', function () {
+            if (!ends) { return; }
+            shiftAnchors(ends, i + 1, 1, points.length + 1);
+            shape.data.smooth = shiftIndexes(shape.data.smooth, i + 1, 1);
+          });
+          mid.on('drag', function (event) {
             var now = points.slice();
             now.splice(i + 1, 0, mid.getLatLng());
+            curveAll(event);
             apply(now);
           });
           mid.on('dragend', function () { savePoints(); build(); });

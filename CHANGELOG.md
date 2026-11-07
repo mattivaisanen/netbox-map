@@ -71,6 +71,19 @@ New:
 - Cards show sooner, and a card for lines that run together shows at once.
 - Fixed: hairline gaps between map tiles at half zoom steps.
 - Dashes under higher areas are longer, so they no longer look dotted.
+- Curved lines: hold Ctrl while dragging a point to curve the whole line; a
+  new point makes a sharp turn. **Curved** in the shape form switches it.
+  Lines between the same two markers or junctions keep the same path, so
+  changing one changes the others there, and a new line drawn between them
+  takes it too.
+- A line's end can be dragged onto another marker or junction to connect it
+  there.
+- `default_colors` setting: colors for devices, racks, other markers,
+  cables, lines, areas, circles and junctions without their own.
+- The maps page can show maps as a grid of cards; each user's choice of
+  grid or list is remembered.
+- Area and circle labels are always shown in their middle.
+- Backgrounds by default: Simple, Regular and Satellite.
 - When an object is deleted from NetBox, its markers leave every map.
 - `prepare_map_uninstall` removes NetBox's rows about maps before the plugin
   is uninstalled.

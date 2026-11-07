@@ -3,6 +3,8 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from netbox.plugins import get_plugin_config
+
 from dcim.models import CableBundle, Rack
 
 from ..models import Map, MapMarker, MapShape
@@ -122,8 +124,22 @@ class MapViewTests(TestCase):
         data = page.context['map_data']
         self.assertEqual([step['label'] for step in data['place']], ['Building'])
         self.assertEqual(data['shapes'][0]['object'], f'dcim.cablebundle:{bundle.pk}')
-        self.assertEqual(data['tiles']['layers'][0]['name'], 'Standard')
+        # The backgrounds are the configured ones (the defaults unless set locally).
+        self.assertEqual(
+            [layer['name'] for layer in data['tiles']['layers']],
+            [layer['name'] for layer in get_plugin_config('netbox_map', 'base_layers')],
+        )
         self.assertContains(page, 'id="nbm-sidebar"')
+
+    def test_maps_grid_is_remembered(self):
+        make_map(name='Plant')
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('plugins:netbox_map:map_list') + '?view=grid')
+        self.assertContains(response, 'nbm-map-card')
+        # The choice sticks until the user picks the list again.
+        self.assertContains(self.client.get(reverse('plugins:netbox_map:map_list')), 'nbm-map-card')
+        response = self.client.get(reverse('plugins:netbox_map:map_list') + '?view=list')
+        self.assertNotContains(response, 'nbm-map-card')
 
     def test_marker_data_for_the_editor(self):
         device = make_device()

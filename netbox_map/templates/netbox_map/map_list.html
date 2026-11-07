@@ -1,0 +1,54 @@
+{% extends 'generic/object_list.html' %}
+{% load helpers i18n netbox_map %}
+{% comment %}
+  The maps list: NetBox's table, or a grid of cards (view == 'grid').
+  The List / Grid buttons keep the current filters.
+{% endcomment %}
+
+{% block head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% map_asset 'map.css' %}">
+{% endblock %}
+
+{% block extra_controls %}
+  <div class="btn-group" role="group" aria-label="{% trans 'Show as' %}">
+    <a href="?{% for key, values in request.GET.lists %}{% if key != 'view' %}{% for value in values %}{{ key|urlencode }}={{ value|urlencode }}&amp;{% endfor %}{% endif %}{% endfor %}view=list"
+       class="btn btn-outline-secondary{% if view == 'list' %} active{% endif %}" title="{% trans 'Show as a list' %}">
+      <i class="mdi mdi-format-list-bulleted" aria-hidden="true"></i> {% trans "List" %}
+    </a>
+    <a href="?{% for key, values in request.GET.lists %}{% if key != 'view' %}{% for value in values %}{{ key|urlencode }}={{ value|urlencode }}&amp;{% endfor %}{% endif %}{% endfor %}view=grid"
+       class="btn btn-outline-secondary{% if view == 'grid' %} active{% endif %}" title="{% trans 'Show as a grid' %}">
+      <i class="mdi mdi-view-grid-outline" aria-hidden="true"></i> {% trans "Grid" %}
+    </a>
+  </div>
+{% endblock %}
+
+{% block content %}
+  {% if view == 'grid' %}
+    <div class="tab-pane show active" id="object-list" role="tabpanel" aria-labelledby="object-list-tab">
+      {% if filter_form %}
+        {% applied_filters model filter_form request.GET %}
+      {% endif %}
+      <div class="row row-cards">
+        {% for map in maps %}
+          {% include 'netbox_map/inc/map_card.html' %}
+        {% empty %}
+          <div class="col-12 text-secondary">{% trans "No maps found." %}</div>
+        {% endfor %}
+      </div>
+      {% if more_maps %}
+        <div class="text-secondary small mt-2">
+          {% blocktrans trimmed with count=maps|length %}Showing the first {{ count }} maps. Use the filters to find others.{% endblocktrans %}
+        </div>
+      {% endif %}
+    </div>
+    {# The filters tab works the same in both views. #}
+    {% if filter_form %}
+      <div class="tab-pane show" id="filters-form" role="tabpanel" aria-labelledby="filters-form-tab">
+        {% include 'inc/filter_list.html' %}
+      </div>
+    {% endif %}
+  {% else %}
+    {{ block.super }}
+  {% endif %}
+{% endblock content %}

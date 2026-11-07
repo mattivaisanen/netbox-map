@@ -36,7 +36,7 @@ corner shows or hides it) has:
 - **Location:** the parent maps and the region, site or location the map
   is assigned to, as links.
 - **Background:** on a world map, the background to show, such as
-  Standard or Satellite. While editing, **Line up** moves the background
+  Simple, Regular or Satellite. While editing, **Line up** moves the background
   shown: drag the map until it lines up with the others, which are often a
   few meters apart. **Reset** puts it back. Saved for this map, for
   everyone.
@@ -69,6 +69,8 @@ it off. Everything is saved as you go.
 | Jump to a place (world maps) | Type a city, an address, or a latitude and longitude such as `48.85, 2.35` in the box at the top right, then Enter. When several places match, pick one from the list. |
 | Move a shape's points | Click the shape, then **Edit points**. Drag a point to move it, drag a small midpoint to add one, right-click a point to remove it. Click the map when done. |
 | Move or resize a circle | Click it, then **Move or resize**, and drag the middle or the edge. |
+| Curve a line | Click it, then **Edit points**, and hold Ctrl (Cmd on a Mac) while dragging a point or midpoint: the whole line curves. Dragging a midpoint without Ctrl adds a sharp turn. **Curved** in the line's form switches curves on or off. Lines between the same two markers or junctions share one path, so the others follow. |
+| Connect a line's end somewhere else | Click the line, then **Edit points**, and drag its end onto another marker or junction. Dropped elsewhere, the end comes loose. |
 | Move a junction | Click it, then **Move**, and drag it. Lines through it follow. |
 | Label a shape, change its color or level, make an area open another map, or change a line's cable | Click the shape, then **Label, color, link** (**Label, color, route** on a line). |
 | Delete a shape | Click it, then **Delete**. |
@@ -93,6 +95,10 @@ Esc cancels the current tool.
 - A rack page shows the maps the rack is on, with the rack marked.
 
 ## Maps
+
+The maps page lists all maps as a table, or as a grid of cards with a
+picture of each map (**List** and **Grid** at the top). NetBox remembers
+each user's choice.
 
 A map has a name and a **base layer**:
 
@@ -151,6 +157,8 @@ A shape is a **line**, an **area**, a **circle** or a **junction**, with an
 optional label and a color. A junction is a point that lines run through,
 such as a manhole, cable well or pole. Shapes are drawn and reshaped on the map itself; the shape's
 form only changes its label, color, link and (for a circle) radius.
+
+A label on an area or circle is always shown in its middle.
 
 **Level** is below ground, ground or above ground. A line is drawn
 dashed where it runs under an area or circle on a higher level: draw a
