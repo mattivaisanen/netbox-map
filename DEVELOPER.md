@@ -23,8 +23,9 @@ How the plugin is put together, and why.
 | `images.py` | Overlay file checks: allowed types, unsafe SVG content, and reading the pixel size. |
 | `viewer.py` | Builds the JSON a map page hands to `map.js`: overlays, markers (with status color and icon), shapes, the user's rights and the API addresses. |
 | `cards.py` | The card shown when the mouse rests on a marker or cable route: which fields, and how each value is shown. |
-| `assets.py`, `assets/` | Leaflet, `map.js` and `map.css`, served by the plugin itself. |
+| `assets.py`, `assets/` | Leaflet, `map.js`, `export.js` and `map.css`, served by the plugin itself. |
 | `assets/map.js` | Draws a map and runs the editor. |
+| `assets/export.js` | Saves a map as PNG, SVG or PDF (the download button). |
 | `template_content.py` | **Show on map**, assigned maps on region/site/location pages, the rack's maps on rack pages. |
 | `templatetags/netbox_map.py` | `{% map_asset %}`: an asset's address with the plugin version. |
 | `signals.py` | Removes markers of deleted objects, clears the assignment of maps whose region/site/location was deleted, deletes overlay files. |
@@ -257,6 +258,38 @@ into, a container image after it was built never gets. The view serves a
 fixed list of files with a week of browser caching; `{% map_asset %}` adds
 the plugin version and the file's modification time to the address, so a
 changed file is loaded at once.
+
+## Saving a map as a file
+
+`assets/export.js` builds the file in the browser from what Leaflet has
+drawn, so it always matches the screen and needs no library and nothing on
+the server. `buildSvg()` walks Leaflet's panes in their stacking order
+(popups and tooltips left out) and turns each element into SVG:
+
+- `<img>` (tiles, overlays) becomes `<image>`, read with `fetch()` into a
+  `data:` address so the file stands on its own. A CSS filter on a
+  background (a gray map) is painted into the picture on a canvas, as SVG
+  viewers don't all know CSS filters. A server without CORS headers can't
+  be read; that picture is left out and counted.
+- Leaflet's `<svg>` (areas, lines, circles) is copied, with the computed
+  stroke, fill, widths and dashes written onto each shape, because they
+  come from `map.css` classes. Fully see-through "hit" lines are dropped.
+- HTML (marker pins, names, the north arrow, the copyright line) becomes
+  `<rect>` for backgrounds and borders and `<text>` for text and for
+  icon-font glyphs (`::before` content).
+
+Every element is placed the same way (`placement()`): its middle is the
+middle of its box on the screen whatever it is turned by, and the turn and
+scale come from the CSS transforms of it and its parents. That covers
+turned maps, turned tiles, half zoom steps and diamond markers alike.
+Colors pass through a one-pixel canvas, which turns `color-mix()` and
+friends into `#rrggbb` plus opacity. The `@font-face` rules for the fonts
+the text uses are put into the file, since a picture drawn from an SVG
+can't use the page's fonts, and the icons need theirs.
+
+PNG draws the SVG onto a canvas at twice the size. PDF is written by hand
+(`pdfBlob()`): one page holding the PNG's pixels as a FlateDecode image,
+compressed with the browser's `CompressionStream('deflate')`.
 
 ## The editor
 

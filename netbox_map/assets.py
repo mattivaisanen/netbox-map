@@ -1,5 +1,5 @@
 """
-Serves the map's JavaScript and CSS (Leaflet and map.js) from the plugin's
+Serves the map's JavaScript and CSS (Leaflet, map.js and export.js) from the plugin's
 own folder.
 
 They are not Django static files on purpose: static files only reach the
@@ -19,6 +19,7 @@ FILES = {
     'leaflet.js': 'text/javascript',
     'leaflet.css': 'text/css',
     'map.js': 'text/javascript',
+    'export.js': 'text/javascript',
     'map.css': 'text/css',
 }
 

@@ -26,6 +26,17 @@ The button under them goes back to the start view.
   on them, or on a junction, lists the cables, bundles and circuits there
   and lights them up.
 - On a turned map an arrow in the top-right corner points north.
+- The download button under the zoom buttons saves the map as a file:
+  **PNG image**, **SVG drawing** or **PDF document**. The file shows what
+  is on the screen: the same view, background, images, shapes, markers and
+  names, without open popups or editor handles. PNG and PDF have twice the
+  screen's pixels; the PDF page is the size of the map on the screen. The
+  SVG keeps shapes, markers and names as drawing elements, so they stay
+  sharp and can be edited in a drawing program.
+- Backgrounds are read from the tile server again when saving. A tile
+  server that doesn't allow that (no CORS headers) leaves its part of the
+  background out, and a message says how many pictures are missing.
+  OpenStreetMap and Esri allow it.
 - **↑ parent** in the card header goes up to the parent map.
 
 ### Side panel

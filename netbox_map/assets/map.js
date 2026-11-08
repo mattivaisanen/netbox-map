@@ -1540,6 +1540,8 @@
       map.setView(focus.getLatLng(), zoom);
     }
     fitButton(startView, !!data.default_view).addTo(map);
+    // Saving the map as PNG, SVG or PDF (export.js).
+    if (window.NetBoxMapExport) { NetBoxMapExport.control(map, data.name).addTo(map); }
     // Place search is for finding where to draw, so it is part of the editor.
     if (!data.image_only && edit) { placeSearch(map, data.tiles.geocoder_url).addTo(map); }
     if (rotation) { northArrow(rotation).addTo(map); }
