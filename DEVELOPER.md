@@ -9,7 +9,8 @@ How the plugin is put together, and why.
   table, filter set and REST API base classes. No monkey-patching.
 - **No dependency on other plugins** and no Python packages beyond what
   NetBox installs. Images are read with Pillow, which NetBox already has.
-  Leaflet 1.9.4 is bundled in `assets/`; nothing is loaded from a CDN.
+  Leaflet 1.9.4 and MapLibre GL JS 5.24.0 are bundled in `assets/`;
+  nothing is loaded from a CDN.
 - **NetBox's own tables are never changed.** Everything lives in the
   plugin's tables; NetBox objects are referred to by type and ID. Removing
   the plugin (after `prepare_map_uninstall`) leaves NetBox as it was.
@@ -23,7 +24,7 @@ How the plugin is put together, and why.
 | `images.py` | Overlay file checks: allowed types, unsafe SVG content, and reading the pixel size. |
 | `viewer.py` | Builds the JSON a map page hands to `map.js`: overlays, markers (with status color and icon), shapes, the user's rights and the API addresses. |
 | `cards.py` | The card shown when the mouse rests on a marker or cable route: which fields, and how each value is shown. |
-| `assets.py`, `assets/` | Leaflet, `map.js` and `map.css`, served by the plugin itself. |
+| `assets.py`, `assets/` | Leaflet, MapLibre GL, `map.js` and `map.css`, served by the plugin itself. |
 | `assets/map.js` | Draws a map and runs the editor. |
 | `template_content.py` | **Show on map**, assigned maps on region/site/location pages, the rack's maps on rack pages. |
 | `templatetags/netbox_map.py` | `{% map_asset %}`: an asset's address with the plugin version. |
@@ -120,6 +121,16 @@ out). The page embeds it with `json_script` and calls
   position, and the tiles to load are worked out for the view moved back
   by the same amount. The choice is kept in
   `localStorage`, like the sidebar's switches; storage errors are ignored.
+- **Vector backgrounds** (`VectorLayer`, a `base_layers` entry with
+  `style`): MapLibre GL draws into a canvas the size of the map, in
+  Leaflet's tile pane, and follows Leaflet's view on every move and zoom
+  (`jumpTo`, MapLibre zoom = Leaflet zoom − 1 for its 512-pixel tiles).
+  During Leaflet's zoom animation the canvas is scaled like an image.
+  `maplibre-gl.js` (about 1 MB) is loaded by `loadMaplibre()` from beside
+  `map.js` only when such a layer is first shown. The style is fetched by
+  the plugin so `labels: false` can drop its `symbol` layers (all text and
+  icons). Turned maps set MapLibre's bearing to minus the turn; a layer
+  offset moves MapLibre's center back by the offset.
 - **Start view:** `default_x`, `default_y` and `default_zoom` on the map,
   set together or not at all. The fit button goes back to it.
 - **Place search** (`placeSearch()`, editor only): coordinates are parsed

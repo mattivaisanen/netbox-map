@@ -51,10 +51,10 @@ def default_colors():
 
 def tile_settings():
     return {
-        # Each with at least a name and a url; see __init__.py.
+        # Each with at least a name and a tile `url` or a vector `style`; see __init__.py.
         'layers': [
             {'max_zoom': 19, 'attribution': '', **layer}
-            for layer in get_plugin_config(PLUGIN, 'base_layers') or [] if layer.get('url')
+            for layer in get_plugin_config(PLUGIN, 'base_layers') or [] if layer.get('url') or layer.get('style')
         ],
         'geocoder_url': get_plugin_config(PLUGIN, 'geocoder_url'),
     }

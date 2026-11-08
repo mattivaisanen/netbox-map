@@ -84,7 +84,10 @@ New:
   grid or list is remembered.
 - Area and circle labels are always shown in their middle.
 - Backgrounds by default: Simple (light gray, no names), Regular and
-  Satellite.
+  Satellite. Simple is a vector map from OpenFreeMap: sharp at every
+  zoom, no key needed.
+- Vector backgrounds: a `base_layers` entry can give a MapLibre `style`
+  instead of a tile `url`, with `labels: False` to hide all names.
 - Labels can be moved: drag a marker's name or an area's label in the
   editor. The new place is saved.
 - **Back** in the editor's pick lists: after choosing cable, bundle or
