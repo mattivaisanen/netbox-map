@@ -74,6 +74,8 @@ it off. Everything is saved as you go.
 | Move a junction | Click it, then **Move**, and drag it. Lines through it follow. |
 | Label a shape, change its color or level, make an area open another map, or change a line's cable | Click the shape, then **Label, color, link** (**Label, color, route** on a line). |
 | Delete a shape | Click it, then **Delete**. |
+| Move a label | Drag a marker's name, or an area's or circle's label, to where it reads best. A marker's name moves with the marker. |
+| Change a choice in a pick list | **Back** at the top of a search goes back to the first choice (such as cable, cable bundle or circuit); a route already drawn is kept. |
 | Set where the map opens | Move and zoom the map, then **Set start view**. **Clear start view** goes back to fitting everything. |
 | Turn the map | Type the angle next to the turn icon. 90 puts north on the right. |
 | Add an image | **Add image**. On a world map, **Place in view** then puts it in the middle of what you see. |
@@ -158,7 +160,8 @@ optional label and a color. A junction is a point that lines run through,
 such as a manhole, cable well or pole. Shapes are drawn and reshaped on the map itself; the shape's
 form only changes its label, color, link and (for a circle) radius.
 
-A label on an area or circle is always shown in its middle.
+A label on an area or circle is always shown, in its middle until it is
+dragged elsewhere in the editor.
 
 **Level** is below ground, ground or above ground. A line is drawn
 dashed where it runs under an area or circle on a higher level: draw a

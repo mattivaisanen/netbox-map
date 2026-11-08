@@ -60,6 +60,19 @@ class MarkerTests(TestCase):
             MapMarker(map=make_map()).full_clean()
         MapMarker(map=make_map('Other'), label='Entrance').full_clean()
 
+    def test_moved_labels_are_checked(self):
+        map_ = make_map()
+        marker = MapMarker(map=map_, label='Entrance', label_offset=[12, -8])
+        marker.full_clean()
+        area = MapShape(map=map_, kind='area', points=[[0, 0], [1, 0], [1, 1]], label='Yard', label_position=[0.5, 0.5])
+        area.full_clean()
+        for bad in ([1], ['a', 'b'], [True, 0], {'x': 1}):
+            marker.label_offset, area.label_position = bad, bad
+            with self.subTest(value=bad), self.assertRaises(ValidationError):
+                marker.full_clean()
+            with self.subTest(value=bad), self.assertRaises(ValidationError):
+                area.full_clean()
+
     def test_same_object_once_per_map_but_on_many_maps(self):
         device = make_device()
         first, second = make_map('First'), make_map('Second')

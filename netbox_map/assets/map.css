@@ -16,9 +16,12 @@
 .nbm-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .nbm-toolbar .form-range { width: 8rem; }
 .nbm-rotation { width: 8.5rem; }
-.leaflet-tooltip.nbm-label { background: color-mix(in srgb, var(--tblr-bg-surface, #fff) 85%, transparent); border: none;
-  box-shadow: none; padding: 0 4px; font-size: 11px; font-weight: 600; color: var(--tblr-body-color, #1d273b); }
-.leaflet-tooltip.nbm-label::before { display: none; }
+/* Names on the map (labelLayer in map.js): a zero-size anchor at the point,
+   the text centered on it by CSS. A marker's name sits below its pin. */
+.nbm-label-anchor { width: 0; height: 0; }
+.nbm-label { position: absolute; left: 0; top: 19px; transform: translateX(-50%); white-space: nowrap;
+  background: color-mix(in srgb, var(--tblr-bg-surface, #fff) 85%, transparent); border-radius: 3px;
+  padding: 0 4px; font-size: 11px; font-weight: 600; line-height: 1.4; color: var(--tblr-body-color, #1d273b); }
 .nbm-menu { position: absolute; z-index: 1000; width: 16rem; max-height: 22rem; overflow-y: auto; }
 .nbm-menu .list-group-item:disabled { opacity: .55; }
 .leaflet-bar a.nbm-fit { font-size: 18px; line-height: 30px; }
@@ -33,14 +36,14 @@
 
 /* Popups and tooltips in NetBox's colors, so they follow its light and dark themes. */
 .nbm-map .leaflet-popup-content-wrapper, .nbm-map .leaflet-popup-tip,
-.nbm-map .leaflet-tooltip:not(.nbm-label) {
+.nbm-map .leaflet-tooltip {
   background: var(--tblr-bg-surface, #fff); color: var(--tblr-body-color, #1d273b);
   border: 1px solid var(--tblr-border-color, #dce1e7); box-shadow: var(--tblr-box-shadow-dropdown, 0 4px 12px rgba(0, 0, 0, .15));
 }
 .nbm-map .leaflet-popup-content-wrapper { border-radius: var(--tblr-border-radius, 4px); }
 .nbm-map .leaflet-popup-content { margin: .75rem 1rem; font-size: .875rem; line-height: 1.5; }
 .nbm-map .leaflet-container a.leaflet-popup-close-button, .nbm-map a.leaflet-popup-close-button { color: var(--tblr-secondary, #667382); }
-.nbm-map .leaflet-tooltip-top:not(.nbm-label)::before { border-top-color: var(--tblr-border-color, #dce1e7); }
+.nbm-map .leaflet-tooltip-top::before { border-top-color: var(--tblr-border-color, #dce1e7); }
 
 /* The card shown when the mouse rests on a marker. */
 .nbm-hover { position: absolute; z-index: 1000; display: none; width: 19rem; cursor: auto;
@@ -106,4 +109,8 @@
 .nbm-map-thumb i { font-size: 3rem; color: var(--tblr-secondary, #667382); }
 
 /* Labels of areas and circles, always shown in their middle. */
-.leaflet-tooltip.nbm-area-label { font-size: 12px; background: color-mix(in srgb, var(--tblr-bg-surface, #fff) 70%, transparent); }
+.nbm-label.nbm-area-label { top: 0; transform: translate(-50%, -50%); font-size: 12px;
+  background: color-mix(in srgb, var(--tblr-bg-surface, #fff) 70%, transparent); }
+/* Labels that can be dragged (editor), and none in the way of a drawing tool. */
+.nbm-label-move { cursor: move; }
+.nbm-tool-on .nbm-label-move { pointer-events: none; }

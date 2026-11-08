@@ -1,6 +1,8 @@
 from django.db.models import Count, Prefetch
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
+from django.utils.http import urlencode
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import View
 
@@ -61,6 +63,8 @@ class MapListView(generic.ObjectListView):
 @register_model_view(Map)
 class MapView(generic.ObjectView):
     queryset = Map.objects.select_related('parent', 'scope_type')
+    # Rows shown in each list under the map; the rest are a link away.
+    PANEL_ROWS = 25
 
     def get_extra_context(self, request, instance):
         """The map's submaps and parts, each as a table with its own add button."""
@@ -73,7 +77,9 @@ class MapView(generic.ObjectView):
         )
         panels = []
         for heading, model, table_class, queryset, field in sections:
-            table = table_class(queryset.restrict(request.user, 'view'), orderable=False)
+            queryset = queryset.restrict(request.user, 'view')
+            count = queryset.count()
+            table = table_class(queryset[:self.PANEL_ROWS], orderable=False)
             # A column naming this map says nothing on the map's own page.
             for column in ('map', 'parent'):
                 if column in table.columns.names():
@@ -86,6 +92,12 @@ class MapView(generic.ObjectView):
                 'add_url': None if model is MapShape else f'plugins:netbox_map:{opts.model_name}_add',
                 'add_permission': f'{opts.app_label}.add_{opts.model_name}',
                 'add_field': field,
+                'count': count,
+                'more': count > self.PANEL_ROWS,
+                # The full list, filtered to this map.
+                'list_url': reverse(f'plugins:netbox_map:{opts.model_name}_list') + '?' + urlencode(
+                    {f'{field}_id': instance.pk}
+                ),
             })
         # The map itself. ?edit=1 turns on the editor, ?marker=<id> zooms to one marker.
         highlight = request.GET.get('marker')

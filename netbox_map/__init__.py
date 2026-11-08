@@ -28,10 +28,14 @@ class NetBoxMapConfig(PluginConfig):
         # last tiles. Other keys are passed to Leaflet's tile layer.
         'base_layers': [
             {
+                # Light gray, no names: CARTO's Positron without labels. No
+                # key is needed; see CARTO's terms for commercial use.
                 'name': 'Simple',
-                'url': 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-                'attribution': 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
-                'max_zoom': 16,
+                'url': 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+                'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors '
+                               '&copy; <a href="https://carto.com/attributions">CARTO</a>',
+                'subdomains': 'abcd',
+                'max_zoom': 20,
             },
             {
                 'name': 'Regular',

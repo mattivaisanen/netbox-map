@@ -3,7 +3,7 @@
 {# One list on the map page (submaps, markers, ...), with a button to add one to this map. #}
 <div class="card">
   <h2 class="card-header">
-    {{ panel.heading }}
+    {{ panel.heading }}{% if panel.count %} <span class="badge text-bg-secondary">{{ panel.count }}</span>{% endif %}
     {% if panel.add_url and panel.add_permission in perms %}
       <div class="card-actions">
         <a href="{% url panel.add_url %}?{{ panel.add_field }}={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-ghost-primary btn-sm">
@@ -16,6 +16,11 @@
     <div class="table-responsive">
       {% render_table panel.table 'inc/table.html' %}
     </div>
+    {% if panel.more %}
+      <div class="card-footer text-end">
+        <a href="{{ panel.list_url }}">{% blocktrans with count=panel.count %}Show all {{ count }}{% endblocktrans %}</a>
+      </div>
+    {% endif %}
   {% else %}
     <div class="card-body text-muted">{% trans "None" %}</div>
   {% endif %}

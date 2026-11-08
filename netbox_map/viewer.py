@@ -7,6 +7,8 @@ assets/map.js.
 Positions go to the browser as stored (x, y). map.js turns them into
 Leaflet's [y, x] order.
 """
+from collections import defaultdict
+
 from django.middleware.csrf import get_token
 from django.urls import reverse
 from django.utils.http import urlencode
@@ -58,15 +60,37 @@ def tile_settings():
     }
 
 
-def _marker(marker, user):
+def visible_objects(objects, user):
+    """
+    The objects among `objects` the user may see, as a set of (model, pk).
+    One query per kind of object, however many there are.
+    """
+    by_model = defaultdict(set)
+    for obj in objects:
+        if obj is not None:
+            by_model[type(obj)].add(obj.pk)
+    visible = set()
+    for model, pks in by_model.items():
+        if hasattr(model.objects, 'restrict'):
+            pks = model.objects.restrict(user, 'view').filter(pk__in=pks).order_by().values_list('pk', flat=True)
+        visible.update((model, pk) for pk in pks)
+    return visible
+
+
+def _sees(obj, user, visible):
+    """Whether the user may see `obj`; `visible` is from visible_objects(), or None to ask now."""
+    if obj is None:
+        return False
+    if visible is None:
+        visible = visible_objects([obj], user)
+    return (type(obj), obj.pk) in visible
+
+
+def _marker(marker, user, visible=None):
     """One marker for the browser, or None when the user may not see its object."""
     obj = marker.object
-    if marker.object_type_id:
-        if obj is None:
-            return None
-        model = type(obj)
-        if hasattr(model.objects, 'restrict') and not model.objects.restrict(user, 'view').filter(pk=obj.pk).exists():
-            return None
+    if marker.object_type_id and not _sees(obj, user, visible):
+        return None
     type_label = f'{marker.object_type.app_label}.{marker.object_type.model}' if marker.object_type_id else ''
     status_color = obj.get_status_color() if obj is not None and hasattr(obj, 'get_status_color') else None
     return {
@@ -76,6 +100,7 @@ def _marker(marker, user):
         'x': marker.x,
         'y': marker.y,
         'label': str(marker),
+        'label_offset': marker.label_offset,
         'type': str(marker.object_type.name).title() if marker.object_type_id else '',
         'url': obj.get_absolute_url() if obj is not None and hasattr(obj, 'get_absolute_url') else None,
         'map_link': marker.is_map_link,
@@ -102,16 +127,14 @@ def _overlay(overlay):
     }
 
 
-def route_object(shape, user):
+def route_object(shape, user, visible=None):
     """The cable, cable bundle or circuit `shape` is the route of, if the user may see it."""
     obj = shape.object if shape.object_type_id else None
-    if obj is None or not type(obj).objects.restrict(user, 'view').filter(pk=obj.pk).exists():
-        return None
-    return obj
+    return obj if _sees(obj, user, visible) else None
 
 
-def _shape(shape, user):
-    route = route_object(shape, user)
+def _shape(shape, user, visible=None):
+    route = route_object(shape, user, visible)
     return {
         'id': shape.pk,
         'kind': shape.kind,
@@ -122,6 +145,7 @@ def _shape(shape, user):
         'level': shape.level,
         'ends': shape.ends or {},
         'smooth': shape.smooth or [],
+        'label_position': shape.label_position,
         'link_url': shape.link.get_absolute_url() if shape.link_id else None,
         'link_name': shape.link.name if shape.link_id else None,
         # The route's object: 'app.model:id', its kind and name, and its status
@@ -201,8 +225,16 @@ def _place(map_):
 def map_data(map_, request, highlight=None):
     """Everything assets/map.js needs to draw `map_` for this request's user."""
     user = request.user
-    markers = MapMarker.objects.restrict(user, 'view').filter(map=map_).select_related('object_type')
-    markers = [data for data in (_marker(marker, user) for marker in markers.prefetch_related('object')) if data]
+    # Objects come in one query per kind (prefetch), and so do the checks
+    # of which of them the user may see.
+    markers = list(
+        MapMarker.objects.restrict(user, 'view').filter(map=map_).select_related('object_type').prefetch_related('object')
+    )
+    shapes = list(map_.shapes.restrict(user, 'view').select_related('link', 'object_type').prefetch_related('object'))
+    visible = visible_objects(
+        [m.object for m in markers if m.object_type_id] + [s.object for s in shapes if s.object_type_id], user
+    )
+    markers = [data for data in (_marker(marker, user, visible) for marker in markers) if data]
     return_url = map_.get_absolute_url()
     return {
         'id': map_.pk,
@@ -212,10 +244,7 @@ def map_data(map_, request, highlight=None):
         'tiles': tile_settings(),
         'overlays': [_overlay(overlay) for overlay in map_.overlays.restrict(user, 'view')],
         'markers': markers,
-        'shapes': [
-            _shape(shape, user)
-            for shape in map_.shapes.restrict(user, 'view').select_related('link', 'object_type')
-        ],
+        'shapes': [_shape(shape, user, visible) for shape in shapes],
         'default_view': (
             {'x': map_.default_x, 'y': map_.default_y, 'zoom': map_.default_zoom} if map_.has_default_view else None
         ),
