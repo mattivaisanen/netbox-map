@@ -4,6 +4,8 @@
 
 New:
 
+- Save a map as a PNG, SVG or PDF file with the download button under the
+  zoom buttons. The file shows the map as it is on the screen.
 - Maps, with a world map or an image as the base layer. A map can sit under
   another map and be assigned to a region, site group, site or location.
 - Overlays: PNG, JPEG, GIF, WebP or SVG images on a map, with opacity and
@@ -88,6 +90,7 @@ New:
   zoom, no key needed.
 - Vector backgrounds: a `base_layers` entry can give a MapLibre `style`
   instead of a tile `url`, with `labels: False` to hide all names.
+  Saved PNG, SVG and PDF files include vector backgrounds.
 - Labels can be moved: drag a marker's name or an area's label in the
   editor. The new place is saved.
 - **Back** in the editor's pick lists: after choosing cable, bundle or
