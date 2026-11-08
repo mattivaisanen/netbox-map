@@ -1,3 +1,4 @@
+from django.db.models import Count, Prefetch
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils.translation import gettext_lazy as _
@@ -17,10 +18,44 @@ from .models import Map, MapMarker, MapOverlay, MapShape
 
 @register_model_view(Map, 'list', path='', detail=False)
 class MapListView(generic.ObjectListView):
+    """
+    All maps, as NetBox's usual table or as a grid of cards. ?view=grid or
+    ?view=list switches; each user's last choice is kept in their NetBox
+    preferences.
+    """
     queryset = Map.objects.select_related('parent', 'scope_type')
     filterset = filtersets.MapFilterSet
     filterset_form = forms.MapFilterForm
     table = tables.MapTable
+    template_name = 'netbox_map/map_list.html'
+
+    # Where the choice is kept in the user's preferences.
+    VIEW_PREFERENCE = 'plugins.netbox_map.maps_view'
+    # The most maps the grid shows at once; filters narrow it down.
+    GRID_LIMIT = 200
+
+    def get_extra_context(self, request):
+        user = request.user
+        view = request.GET.get('view')
+        if view in ('grid', 'list'):
+            if user.is_authenticated and user.config.get(self.VIEW_PREFERENCE) != view:
+                user.config.set(self.VIEW_PREFERENCE, view, commit=True)
+        else:
+            view = (user.config.get(self.VIEW_PREFERENCE) if user.is_authenticated else None) or 'list'
+        if view != 'grid':
+            return {'view': 'list'}
+        # The filters are already applied to self.queryset.
+        maps = (
+            self.queryset.restrict(user, 'view')
+            .annotate(marker_count=Count('markers', distinct=True), shape_count=Count('shapes', distinct=True))
+            .prefetch_related(Prefetch('overlays', queryset=MapOverlay.objects.order_by('weight', 'pk')), 'scope')
+        )
+        maps = list(maps[:self.GRID_LIMIT + 1])
+        return {
+            'view': 'grid',
+            'maps': maps[:self.GRID_LIMIT],
+            'more_maps': len(maps) > self.GRID_LIMIT,
+        }
 
 
 @register_model_view(Map)

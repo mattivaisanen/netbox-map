@@ -299,6 +299,9 @@ class MapShape(ChangeLoggedModel):
     # as junctions the line runs through. Only on the map: nothing is
     # connected in NetBox.
     ends = models.JSONField(verbose_name=_('ends'), default=dict, blank=True)
+    # Points a line bends smoothly through, by index (the others are sharp
+    # turns). Empty: a line of straight pieces.
+    smooth = models.JSONField(verbose_name=_('smooth points'), default=list, blank=True)
 
     class Meta:
         ordering = ('map', 'label', 'pk')
@@ -344,6 +347,14 @@ class MapShape(ChangeLoggedModel):
                 raise ValidationError({'object': _('Only a line can be the route of a cable or circuit.')})
             if (self.object_type.app_label, self.object_type.model) not in ROUTE_MODELS:
                 raise ValidationError({'object': _('A line can be the route of a cable, cable bundle or circuit.')})
+        if self.smooth:
+            if self.kind != ShapeKindChoices.LINE:
+                raise ValidationError({'smooth': _('Only a line can be curved.')})
+            if not isinstance(self.smooth, list) or not all(
+                isinstance(index, int) and not isinstance(index, bool) and 0 < index < len(points) - 1
+                for index in self.smooth
+            ):
+                raise ValidationError({'smooth': _('Smooth points are indexes of points in between, such as [1, 2].')})
         if self.ends:
             if not self._valid_ends(len(points)):
                 raise ValidationError({'ends': _(

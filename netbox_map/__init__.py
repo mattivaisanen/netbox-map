@@ -28,7 +28,13 @@ class NetBoxMapConfig(PluginConfig):
         # last tiles. Other keys are passed to Leaflet's tile layer.
         'base_layers': [
             {
-                'name': 'Standard',
+                'name': 'Simple',
+                'url': 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                'attribution': 'Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
+                'max_zoom': 16,
+            },
+            {
+                'name': 'Regular',
                 'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 'max_zoom': 19,
@@ -49,6 +55,11 @@ class NetBoxMapConfig(PluginConfig):
         'hover_fields': {},
         # Show a rack's front elevation on its card.
         'rack_elevation': True,
+        # Colors used when a marker or shape has none of its own, by kind:
+        # device, rack, object (other markers), cable, line, area, circle,
+        # junction. Hex, such as '4caf50'. Unset kinds keep the built-in
+        # look (status colors for markers and cables).
+        'default_colors': {},
     }
 
     menu = 'navigation.menu'

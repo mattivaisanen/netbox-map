@@ -75,5 +75,5 @@ class MapShapeSerializer(ChangeLogMessageSerializer, ValidatedModelSerializer):
     class Meta:
         model = MapShape
         fields = ('id', 'url', 'display', 'map', 'kind', 'label', 'color', 'points', 'radius', 'link', 'object_type',
-                  'object_id', 'object', 'level', 'ends', 'created', 'last_updated')
+                  'object_id', 'object', 'level', 'ends', 'smooth', 'created', 'last_updated')
         brief_fields = ('id', 'url', 'display', 'map', 'kind', 'label')

@@ -153,8 +153,13 @@ class MapShapeForm(GenericObjectFormMixin, forms.ModelForm):
         help_text=_('The cable, cable bundle or circuit this line is the route of.'),
     )
 
+    curved = forms.BooleanField(
+        label=_('Curved'), required=False,
+        help_text=_('Bend smoothly through every point instead of turning sharply.'),
+    )
+
     fieldsets = (
-        FieldSet('label', 'color', 'level', 'link', 'radius', name=_('Shape')),
+        FieldSet('label', 'color', 'level', 'curved', 'link', 'radius', name=_('Shape')),
         FieldSet('object', name=_('Route'), html_id='shape-object'),
     )
 
@@ -172,10 +177,20 @@ class MapShapeForm(GenericObjectFormMixin, forms.ModelForm):
         if self.instance.kind == ShapeKindChoices.LINE:
             # Lines (cables) lead somewhere themselves: they don't open maps.
             del self.fields['link']
+            self.fields['curved'].initial = bool(self.instance.smooth)
         else:
+            del self.fields['curved']
             # Only lines are routes: no route field, and no empty Route section.
             del self.fields['object']
             self.fieldsets = self.fieldsets[:1]
+
+    def clean(self):
+        super().clean()
+        # Curved: every point in between bends smoothly; not curved: none do.
+        if 'curved' in self.fields:
+            count = len(self.instance.points or [])
+            self.instance.smooth = list(range(1, count - 1)) if self.cleaned_data.get('curved') else []
+        return self.cleaned_data
 
 
 class MapPartFilterForm(NetBoxModelFilterSetForm):

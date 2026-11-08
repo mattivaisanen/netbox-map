@@ -33,6 +33,20 @@ LABEL_ICON = 'label-outline'
 OBJECT_ICON = 'map-marker'
 
 
+# The kinds `default_colors` can name (see __init__.py).
+COLOR_KINDS = ('device', 'rack', 'object', 'cable', 'line', 'area', 'circle', 'junction')
+
+
+def default_colors():
+    """The `default_colors` setting as {kind: '#rrggbb'}, skipping anything that isn't a color."""
+    colors = {}
+    for kind, value in (get_plugin_config(PLUGIN, 'default_colors') or {}).items():
+        value = str(value).strip().lstrip('#').lower()
+        if kind in COLOR_KINDS and len(value) == 6 and all(c in '0123456789abcdef' for c in value):
+            colors[kind] = f'#{value}'
+    return colors
+
+
 def tile_settings():
     return {
         # Each with at least a name and a url; see __init__.py.
@@ -107,6 +121,7 @@ def _shape(shape, user):
         'radius': shape.radius,
         'level': shape.level,
         'ends': shape.ends or {},
+        'smooth': shape.smooth or [],
         'link_url': shape.link.get_absolute_url() if shape.link_id else None,
         'link_name': shape.link.name if shape.link_id else None,
         # The route's object: 'app.model:id', its kind and name, and its status
@@ -206,6 +221,7 @@ def map_data(map_, request, highlight=None):
         ),
         'rotation': map_.rotation,
         'layer_offsets': map_.layer_offsets or {},
+        'default_colors': default_colors(),
         'place': _place(map_),
         'submaps': [
             {'name': child.name, 'url': child.get_absolute_url()}

@@ -5,7 +5,8 @@ Settings live under `PLUGINS_CONFIG['netbox_map']` in NetBox's
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `base_layers` | list | Standard, Satellite (see below) | Backgrounds of world maps. Users switch between them in the map's side panel. Empty list: world maps have no background. |
+| `base_layers` | list | Simple, Regular, Satellite (see below) | Backgrounds of world maps. Users switch between them in the map's side panel. Empty list: world maps have no background. |
+| `default_colors` | dict | `{}` | Colors for markers and shapes that have none of their own, by kind. See below. |
 | `geocoder_url` | string | `'https://nominatim.openstreetmap.org/search'` | Address of a [Nominatim](https://nominatim.org)-compatible search, used by the place box in the map editor. The browser calls it directly. Empty: the box accepts only coordinates. |
 | `hover_fields` | dict | `{}` | Details on the card shown when the mouse rests on a marker or a cable route, per object type. See below. |
 | `rack_elevation` | boolean | `True` | Show a rack's front elevation on its card. |
@@ -31,7 +32,8 @@ The defaults are:
 
 | Name | Source | Terms |
 |---|---|---|
-| Standard | OpenStreetMap | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): free for light use. |
+| Simple | Esri World Light Gray Canvas (to level 16) | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
+| Regular | OpenStreetMap | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): free for light use. |
 | Satellite | Esri World Imagery | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
 
 Check that the terms fit how your organization uses NetBox. To use other
@@ -94,3 +96,24 @@ PLUGINS_CONFIG = {
     },
 }
 ```
+
+## Default colors
+
+`default_colors` sets colors by kind, as hex such as `'4caf50'`:
+
+| Kind | Used for |
+|---|---|
+| `device`, `rack`, `object` | Markers of devices, racks and other objects without a color of their own, instead of their status color. |
+| `cable` | Cable routes without a color of their own whose cable has no color, instead of their status color. |
+| `line`, `area`, `circle`, `junction` | Shapes still in the color new shapes get (`#2196f3`). |
+
+Changing a setting recolors everything that has no color of its own.
+
+```python
+PLUGINS_CONFIG = {
+    'netbox_map': {
+        'default_colors': {'rack': '455a64', 'junction': '795548', 'area': '9e9e9e'},
+    },
+}
+```
+
