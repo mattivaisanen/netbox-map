@@ -4,6 +4,9 @@
 
 New:
 
+- Fixed: world maps had no picture in the maps grid, only an icon. They
+  now show a small map of their start view, or of everything on them,
+  with their images on top.
 - Save a map as a PNG, SVG or PDF file with the download button under the
   zoom buttons. The file shows the map as it is on the screen.
 - Maps, with a world map or an image as the base layer. A map can sit under

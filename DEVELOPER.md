@@ -160,6 +160,16 @@ out). The page embeds it with `json_script` and calls
 - **Maps page:** `MapListView` renders NetBox's table or, with `?view=grid`,
   cards (`inc/map_card.html`) of the filtered maps. The choice is kept in
   the user's NetBox preferences (`plugins.netbox_map.maps_view`).
+- **Map pictures in the grid** (`thumbnails.py`): a world map's card shows
+  plain `<img>` tiles placed by the server, so no map library runs on the
+  maps page and NetBox fetches nothing itself. The view is the map's start
+  view (two zoom levels out) or the bounds of its markers, shape points and
+  placed images, projected to Web Mercator by hand and fitted at a whole
+  zoom level. Tiles come from the first `base_layers` entry with a `url`
+  (vector styles would need WebGL per card); the url is filled like
+  Leaflet's (`{s}`, `{-y}`, `tms`, other option keys). Cost: two queries
+  for all cards (marker min/max, shape points). Pictures are north up,
+  without layer offsets.
 
 ## Side panel
 
