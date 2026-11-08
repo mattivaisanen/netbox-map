@@ -23,6 +23,7 @@ Each entry of `base_layers` is one background:
 | `url` | Tile address, with `{z}`, `{x}` and `{y}` where the zoom level and tile numbers go. `{s}` (subdomain) and `{r}` (`@2x` on high-resolution screens) also work. |
 | `attribution` | Credit shown in the map's corner. HTML is allowed. Most tile servers require one. |
 | `max_zoom` | Highest zoom level the server offers (default 19). Maps zoom in further, to level 22, by enlarging the last tiles. Zooming goes in half steps. |
+| `filter` | A CSS filter for the layer's tiles, such as `'grayscale(1) contrast(0.9)'` for a plain, colorless street map. |
 
 Other keys go to Leaflet's
 [tile layer options](https://leafletjs.com/reference.html#tilelayer-option),
@@ -32,9 +33,13 @@ The defaults are:
 
 | Name | Source | Terms |
 |---|---|---|
-| Simple | Esri World Light Gray Canvas (to level 16) | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
+| Simple | CARTO Positron without labels | No key needed. [CARTO basemap terms](https://carto.com/basemaps): free for light, non-commercial use; commercial use needs a CARTO license. |
 | Regular | OpenStreetMap | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): free for light use. |
 | Satellite | Esri World Imagery | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
+
+For a plain map under OpenStreetMap's own terms only, use OpenStreetMap
+tiles with `'filter': 'grayscale(1)'`: the colors go, the street names
+stay.
 
 Check that the terms fit how your organization uses NetBox. To use other
 sources, or only some of these, list them yourself:

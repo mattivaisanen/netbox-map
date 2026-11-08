@@ -83,7 +83,19 @@ New:
 - The maps page can show maps as a grid of cards; each user's choice of
   grid or list is remembered.
 - Area and circle labels are always shown in their middle.
-- Backgrounds by default: Simple, Regular and Satellite.
+- Backgrounds by default: Simple (light gray, no names), Regular and
+  Satellite.
+- Labels can be moved: drag a marker's name or an area's label in the
+  editor. The new place is saved.
+- **Back** in the editor's pick lists: after choosing cable, bundle or
+  circuit for a new route (or device, rack, map or label from the
+  right-click menu), go back and choose again without redrawing.
+- Lists under a map show the first 25 rows, with a link to all of them.
+- Faster with many markers: names no longer slow down zooming, a map
+  loads its objects' permissions in one query per kind, and lines are
+  redrawn at most once a frame while an area is dragged.
+- Fixed: grid lines between map tiles on high-resolution and scaled
+  screens.
 - When an object is deleted from NetBox, its markers leave every map.
 - `prepare_map_uninstall` removes NetBox's rows about maps before the plugin
   is uninstalled.

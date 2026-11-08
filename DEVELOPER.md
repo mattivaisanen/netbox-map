@@ -94,8 +94,7 @@ out). The page embeds it with `json_script` and calls
 - **Fitting:** everything placed is added to one bounds and the map starts
   with `fitBounds()`. A circle's bounds are worked out by hand, because
   Leaflet needs the map's view to compute them and the view isn't set yet.
-  Permanent marker labels are bound after the view is set for the same
-  reason.
+  Labels are added after the view is set for the same reason.
 - **Status colors:** markers use NetBox's own `text-bg-<color>` classes
   with the object's `get_status_color()`, so they match its badges and
   follow light and dark mode.
@@ -113,7 +112,9 @@ out). The page embeds it with `json_script` and calls
 - **Background layers:** one `MapTileLayer` per `base_layers` entry,
   one shown at a time (`setBaseLayer()`). Tiles are drawn one pixel larger
   than they are: at half zoom steps the browser rounds their edges and
-  would leave hairline gaps. `Map.layer_offsets` (`{name: [east, north]}`
+  would leave hairline gaps. Leaflet blends tiles with `mix-blend-mode:
+  plus-lighter`, which brightens the overlap into a grid, so these tiles
+  use normal blending. `Map.layer_offsets` (`{name: [east, north]}`
   in meters) moves a layer to line up with the others: `setOffset()` turns
   meters into pixels at the tile zoom and adds them to each tile's
   position, and the tiles to load are worked out for the view moved back
@@ -127,6 +128,19 @@ out). The page embeds it with `json_script` and calls
   policy forbids search-as-you-type, so suggestions are the up to five
   results of that one search.
 
+- **Labels** (`labelLayer()`): marker names and area labels are small
+  markers in their own pane (`nbmLabels`), not Leaflet tooltips. A tooltip
+  measures its size on every zoom and move, which forces a layout per
+  label and made zooming slow with hundreds of markers; these are centered
+  by CSS and never measured. A label is shown and hidden with its marker
+  or shape (`followLayer()`). In the editor they can be dragged
+  (`draggableLabel()`): a marker's name saves `MapMarker.label_offset`
+  (screen pixels from below the marker), an area's label saves
+  `MapShape.label_position` (a map point).
+- **Permissions in bulk:** `viewer.visible_objects()` checks which of a
+  map's objects the user may see with one query per kind of object, and
+  objects are prefetched, so a map costs the same handful of queries
+  however much is on it.
 - **Default colors** (`default_colors`, read by `viewer.default_colors()`):
   a marker without a color takes its kind's default before its status
   color; a shape still in the color new shapes get (`DEFAULT_COLOR`) takes
@@ -193,7 +207,10 @@ projected points of a span sideways by lane × `LANE` px, with mitred
 corners. Over `BUNDLE_AT` lines in one span are drawn once, as a bundle.
 Junctions grow to cover the lane changes inside them. Pieces are
 recomputed when a line or an area changes (`relayout()` when the number
-of points changes).
+of points changes). The areas above a level are worked out once per
+redraw (`coversAbove()`, cached in `state.covers`), each with a bounding
+box so segments nowhere near it skip the crossing math; a dragged area
+redraws lines at most once a frame (`drawAllLinesSoon()`).
 
 `MapShape.ends` is `{"start": {...}, "end": {...}, "via": [{"point": i,
 ...}]}`, each target `{"marker": id}` or `{"shape": id}`. While drawing,
@@ -217,7 +234,7 @@ copies a reshaped line's points and curves between two anchors to the
 other lines there; `adoptPaths()` does the same for a newly drawn line.
 
 Panes, bottom up: images (overlay pane), `nbmAreas`, `nbmHalo` (the light
-behind hovered lines), `nbmLines`, `nbmJunctions`, markers. Lines above
+behind hovered lines), `nbmLines`, `nbmJunctions`, markers, `nbmLabels`. Lines above
 areas also get the mouse first.
 
 ## Cable routes
@@ -225,7 +242,8 @@ areas also get the mouse first.
 A route is a `MapShape` line with a generic relation (`object`) limited to
 cables, cable bundles and circuits (`ROUTE_TYPES`). **Cable** in the editor
 draws a line, then `pickRoute()` searches the three types through the REST
-API. A deleted cable leaves its line in place without the relation
+API; **Back** (`backButton()`) returns to the choice of type with the
+drawn line kept. A deleted cable leaves its line in place without the relation
 (`signals.object_deleted`). Lines are drawn in their own color when it
 isn't the default (`DEFAULT_COLOR`), else the cable's color, else with an
 `nbm-route-<status color>` class whose CSS uses NetBox's color variables.
@@ -260,6 +278,7 @@ CSRF cookie is HttpOnly, so the token comes in the page data.
 - **Right-click menu** (`startContextMenu()`): devices, racks and maps are
   searched through NetBox's REST API (`viewer.SEARCHABLE`, limited to the
   map's scope with the matching `*_id` filter), labels are typed in place.
+  The search or label form has **Back** to the first choice.
   The marker is created with a `POST`, then drawn from
   `markers/<id>/data/` (`MarkerDataView`), which returns the same data as
   the page, so the new marker has its status color without a reload.
@@ -268,6 +287,11 @@ CSRF cookie is HttpOnly, so the token comes in the page data.
   picking any object type works the same as everywhere else in NetBox.
 
 ## Other pages
+
+The map's own page lists its submaps, markers, overlays and shapes under
+the map (`MapView`, `inc/part_panel.html`), each cut to `PANEL_ROWS` rows
+with a count and a link to the full list filtered to the map. A map with
+hundreds of markers otherwise rendered every row of every table.
 
 `template_content.py` adds:
 

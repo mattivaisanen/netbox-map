@@ -40,6 +40,13 @@ ROUTE_TYPES = models.Q(app_label='dcim', model__in=('cable', 'cablebundle')) | m
 ROUTE_MODELS = (('dcim', 'cable'), ('dcim', 'cablebundle'), ('circuits', 'circuit'))
 
 
+def number_pair(value):
+    """Whether `value` is [a, b], two numbers (a moved label's offset or position)."""
+    return isinstance(value, list) and len(value) == 2 and all(
+        isinstance(v, (int, float)) and not isinstance(v, bool) for v in value
+    )
+
+
 def overlay_upload_to(instance, filename):
     """Overlay images go to MEDIA_ROOT/netbox-map/, under the map's ID."""
     return f'netbox-map/{instance.map_id}/{os.path.basename(filename)}'
@@ -219,6 +226,9 @@ class MapMarker(ChangeLoggedModel):
     # Empty until the marker is placed on the map.
     x = models.FloatField(verbose_name=_('x'), blank=True, null=True)
     y = models.FloatField(verbose_name=_('y'), blank=True, null=True)
+    # Where the name is shown, moved from below the marker: [right, down]
+    # in screen pixels. Empty: right below it.
+    label_offset = models.JSONField(verbose_name=_('label offset'), blank=True, null=True)
 
     class Meta:
         ordering = ('map', 'label', 'pk')
@@ -262,6 +272,8 @@ class MapMarker(ChangeLoggedModel):
             raise ValidationError({'label': _('A marker with no object needs a label.')})
         if (self.x is None) != (self.y is None):
             raise ValidationError(_('Give both x and y, or neither to place the marker later.'))
+        if self.label_offset is not None and not number_pair(self.label_offset):
+            raise ValidationError({'label_offset': _('A label offset is [right, down] in pixels.')})
 
 
 class MapShape(ChangeLoggedModel):
@@ -302,6 +314,8 @@ class MapShape(ChangeLoggedModel):
     # Points a line bends smoothly through, by index (the others are sharp
     # turns). Empty: a line of straight pieces.
     smooth = models.JSONField(verbose_name=_('smooth points'), default=list, blank=True)
+    # Where an area's or circle's label is shown, [x, y] on the map. Empty: its middle.
+    label_position = models.JSONField(verbose_name=_('label position'), blank=True, null=True)
 
     class Meta:
         ordering = ('map', 'label', 'pk')
@@ -347,6 +361,8 @@ class MapShape(ChangeLoggedModel):
                 raise ValidationError({'object': _('Only a line can be the route of a cable or circuit.')})
             if (self.object_type.app_label, self.object_type.model) not in ROUTE_MODELS:
                 raise ValidationError({'object': _('A line can be the route of a cable, cable bundle or circuit.')})
+        if self.label_position is not None and not number_pair(self.label_position):
+            raise ValidationError({'label_position': _('A label position is [x, y].')})
         if self.smooth:
             if self.kind != ShapeKindChoices.LINE:
                 raise ValidationError({'smooth': _('Only a line can be curved.')})

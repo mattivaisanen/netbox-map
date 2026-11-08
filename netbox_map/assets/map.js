@@ -100,6 +100,7 @@
       title: marker.label,
     }).addTo(state.map);
     layer.nbmLabel = marker.label;
+    layer.nbmData = marker;
     if (marker.map_link && marker.url && !edit) {
       layer.on('click', function () { window.location.href = marker.url; });
     } else {
@@ -114,7 +115,7 @@
     if (url) { hoverCard(state, layer, function () { return { key: url, url: url }; }); }
     state.markers[marker.id] = layer;
     state.bounds.extend(layer.getLatLng());
-    if (state.ready) { addLabel(layer); }
+    if (state.ready) { addLabel(state, layer); }
     return layer;
   }
 
@@ -131,6 +132,7 @@
     var timer = null;
     var pending = null;
     function start(event) {
+      if (state.labelDrag) { return; }
       var what = content(event);
       if (!what || what.key === pending || (state.cardFor === layer && state.cardKey === what.key)) { return; }
       pending = what.key;
@@ -214,8 +216,127 @@
     if (state.card) { state.card.style.display = 'none'; }
   }
 
-  function addLabel(layer) {
-    layer.bindTooltip(escapeHtml(layer.nbmLabel), { permanent: true, direction: 'bottom', className: 'nbm-label' });
+  // A label on the map: a small marker of its own holding the text. Not a
+  // Leaflet tooltip: tooltips measure their size each time the map zooms
+  // or moves, which is slow with hundreds of names. Here CSS centers the
+  // text (map.css), so nothing is measured. Only labels that can be
+  // dragged take the mouse.
+  function labelLayer(latlng, text, className, movable) {
+    return L.marker(latlng, {
+      icon: L.divIcon({
+        className: 'nbm-label-anchor',
+        html: '<span class="nbm-label ' + className + '">' + escapeHtml(text) + '</span>',
+        iconSize: null,
+      }),
+      interactive: movable, keyboard: false, pane: 'nbmLabels',
+    });
+  }
+
+  // Shows `label` while `layer` is on the map (the sidebar's switches hide
+  // and show layers), and calls ready(element) the first time it is shown.
+  function followLayer(state, layer, label, ready) {
+    var element = null;
+    function show() {
+      label.addTo(state.map);
+      if (!element) {
+        element = label.getElement();
+        if (ready) { ready(element); }
+      }
+    }
+    layer.on('add', show);
+    layer.on('remove', function () { label.remove(); });
+    if (state.map.hasLayer(layer)) { show(); }
+  }
+
+  // A marker's name, below it or moved from there (label_offset, in screen
+  // pixels). In the editor the name can be dragged.
+  function addLabel(state, layer) {
+    var marker = layer.nbmData;
+    var movable = !!(state.edit && state.data.can.change_marker);
+    var label = labelLayer(layer.getLatLng(), layer.nbmLabel, 'nbm-marker-label', movable);
+    // The name goes with the marker when it is dragged.
+    layer.on('move', function (event) { label.setLatLng(event.latlng); });
+    var offset = L.point(marker.label_offset || [0, 0]);
+    followLayer(state, layer, label, function (element) {
+      var text = element.firstChild;
+      function place(o) { text.style.marginLeft = o.x + 'px'; text.style.marginTop = o.y + 'px'; }
+      place(offset);
+      if (!movable) { return; }
+      var from = null;
+      draggableLabel(state, element, {
+        start: function () { from = offset; },
+        move: function (dx, dy) { offset = from.add([dx, dy]); place(offset); },
+        done: function () {
+          marker.label_offset = [Math.round(offset.x), Math.round(offset.y)];
+          api('PATCH', state.data.api.markers + marker.id + '/', { label_offset: marker.label_offset }).catch(failed);
+        },
+      });
+    });
+  }
+
+  // An area's or circle's label, always shown: in its middle, or where it
+  // was dragged to (label_position, a point on the map). In the editor
+  // the label can be dragged.
+  function addAreaLabel(state, entry) {
+    var shape = entry.data;
+    var map = state.map;
+    var movable = !!(state.edit && state.data.can.change_shape);
+    var layer = entry.layer;
+    var at = shape.label_position
+      ? toLatLng(shape.label_position[0], shape.label_position[1])
+      : (layer.getCenter ? layer.getCenter() : layer.getLatLng());
+    var label = labelLayer(at, entry.label, 'nbm-area-label', movable);
+    followLayer(state, layer, label, function (element) {
+      if (!movable) { return; }
+      var from = null;
+      draggableLabel(state, element, {
+        start: function () { from = map.latLngToContainerPoint(label.getLatLng()); },
+        move: function (dx, dy) { label.setLatLng(map.containerPointToLatLng(from.add([dx, dy]))); },
+        done: function () {
+          var position = fromLatLng(label.getLatLng());
+          shape.label_position = [position.x, position.y];
+          api('PATCH', state.data.api.shapes + shape.id + '/', { label_position: shape.label_position }).catch(failed);
+        },
+      });
+    });
+  }
+
+  // Lets a label's element be dragged with the mouse. handlers.start() is
+  // called when a drag starts, move(dx, dy) while dragging, with the
+  // distance in screen pixels, and done() when it is let go after moving.
+  // Not while a drawing tool is in use.
+  function draggableLabel(state, element, handlers) {
+    L.DomUtil.addClass(element, 'nbm-label-move');
+    element.title = 'Drag to move the label';
+    var moved = false;
+    L.DomEvent.on(element, 'mousedown', function (event) {
+      if (state.tool || event.button !== 0) { return; }
+      L.DomEvent.stop(event);
+      var x = event.clientX;
+      var y = event.clientY;
+      moved = false;
+      state.map.dragging.disable();
+      function onMove(e) {
+        var dx = e.clientX - x;
+        var dy = e.clientY - y;
+        // A small jitter is still a click.
+        if (!moved && Math.abs(dx) + Math.abs(dy) < 3) { return; }
+        if (!moved) { handlers.start(); state.labelDrag = true; hideCard(state); }
+        moved = true;
+        handlers.move(dx, dy);
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        state.map.dragging.enable();
+        state.labelDrag = false;
+        if (moved) { handlers.done(); }
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    // A click on the label is not a click on the map below it.
+    L.DomEvent.disableClickPropagation(element);
   }
 
   // A button under + and − that brings the whole map back into view.
@@ -273,9 +394,9 @@
     return L.Util.extend({}, base, { transformation: transformation, nbmSin: sin, nbmCos: cos, nbmDegrees: degrees });
   }
 
-  // Background tiles. Each tile is drawn one pixel larger than it is: at
-  // half zoom steps the browser rounds tile edges, which otherwise leaves
-  // hairline gaps (a grid) between them. A layer can also be moved a few
+  // Background tiles. Each tile is drawn one pixel larger than it is, over
+  // its neighbors: at half zoom steps and on scaled screens the browser
+  // rounds tile edges, which otherwise leaves hairline gaps (a grid). A layer can also be moved a few
   // meters to line up with the other layers (setOffset).
   var MapTileLayer = L.TileLayer.extend({
     nbmOffset: null,   // [east, north] in meters
@@ -322,6 +443,11 @@
       var size = this.getTileSize();
       tile.style.width = (size.x + 1) + 'px';
       tile.style.height = (size.y + 1) + 'px';
+      // Leaflet blends tiles with "plus-lighter", which turns the overlap
+      // into a bright line; overlapping tiles need normal blending.
+      tile.style.mixBlendMode = 'normal';
+      // A layer's own look, such as 'grayscale(1)' for a plain map (setting).
+      if (this.options.filter) { tile.style.filter = this.options.filter; }
     },
   });
 
@@ -674,19 +800,7 @@
   function linePieces(state, entry, latlngs) {
     var map = state.map;
     function px(latlng) { return map.project(latlng, 0); }
-    var covers = [];
-    Object.keys(state.shapes).forEach(function (id) {
-      var other = state.shapes[id];
-      if ((other.data.level || 0) <= (entry.data.level || 0) || !map.hasLayer(other.layer)) { return; }
-      if (other.data.kind === 'area') {
-        covers.push({ ring: other.layer.getLatLngs()[0].map(px) });
-      } else if (other.data.kind === 'circle') {
-        var c = other.layer.getLatLng();
-        var r = other.layer.getRadius();
-        var edge = state.data.image_only ? L.latLng(c.lat + r, c.lng) : L.latLng(c.lat + r / 111320, c.lng);
-        covers.push({ center: px(c), radius: px(c).distanceTo(px(edge)) });
-      }
-    });
+    var covers = coversAbove(state, entry.data.level || 0);
     if (!covers.length || latlngs.length < 2) { return [{ latlngs: latlngs, under: false }]; }
 
     var pieces = [];
@@ -695,12 +809,13 @@
       var a = px(latlngs[i]);
       var b = px(latlngs[i + 1]);
       var ts = [0, 1];
-      covers.forEach(function (cover) { ts = ts.concat(crossings(a, b, cover)); });
+      var box = L.bounds(a, b);
+      covers.forEach(function (cover) { if (box.intersects(cover.box)) { ts = ts.concat(crossings(a, b, cover)); } });
       ts.sort(function (x, y) { return x - y; });
       for (var j = 0; j < ts.length - 1; j++) {
         if (ts[j + 1] - ts[j] < 1e-9) { continue; }
         var middle = along(a, b, (ts[j] + ts[j + 1]) / 2);
-        var under = covers.some(function (cover) { return inside(middle, cover); });
+        var under = covers.some(function (cover) { return cover.box.contains(middle) && inside(middle, cover); });
         var from = map.unproject(along(a, b, ts[j]), 0);
         var to = map.unproject(along(a, b, ts[j + 1]), 0);
         if (!current || current.under !== under) {
@@ -711,6 +826,33 @@
       }
     }
     return pieces;
+  }
+
+  // The areas and circles shown above `level`, in zoom-0 pixels, each with
+  // its bounding box (to skip lines nowhere near it). Kept while all lines
+  // are drawn (state.covers), as every line and span needs them.
+  function coversAbove(state, level) {
+    if (state.covers && state.covers[level]) { return state.covers[level]; }
+    var map = state.map;
+    function px(latlng) { return map.project(latlng, 0); }
+    var covers = [];
+    Object.keys(state.shapes).forEach(function (id) {
+      var other = state.shapes[id];
+      if ((other.data.level || 0) <= level || !map.hasLayer(other.layer)) { return; }
+      if (other.data.kind === 'area') {
+        var ring = other.layer.getLatLngs()[0].map(px);
+        covers.push({ ring: ring, box: L.bounds(ring) });
+      } else if (other.data.kind === 'circle') {
+        var c = other.layer.getLatLng();
+        var r = other.layer.getRadius();
+        var edge = state.data.image_only ? L.latLng(c.lat + r, c.lng) : L.latLng(c.lat + r / 111320, c.lng);
+        var center = px(c);
+        var radius = center.distanceTo(px(edge));
+        covers.push({ center: center, radius: radius, box: L.bounds(center.subtract([radius, radius]), center.add([radius, radius])) });
+      }
+    });
+    if (state.covers) { state.covers[level] = covers; }
+    return covers;
   }
 
   function along(a, b, t) { return L.point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t); }
@@ -773,6 +915,9 @@
       if (state.map.hasLayer(entry.layer)) { entry.layer.redraw(); }
     }
     entry.visual.clearLayers();
+    // Areas above the line are looked up once for all its spans.
+    var own = !state.covers;
+    if (own) { state.covers = {}; }
     (entry.spans || []).forEach(function (span) {
       var style = spanStyle(entry, span);
       if (!style) { return; }
@@ -782,10 +927,24 @@
         })).addTo(entry.visual);
       });
     });
+    if (own) { state.covers = null; }
   }
 
   function drawAllLines(state) {
+    state.covers = {};
     eachLine(state, function (entry) { drawLine(state, entry); });
+    state.covers = null;
+  }
+
+  // Draws every line again at the next frame, once however many times it
+  // is asked for before then (an area being dragged changes many times a frame).
+  function drawAllLinesSoon(state) {
+    if (state.drawPending) { return; }
+    state.drawPending = true;
+    L.Util.requestAnimFrame(function () {
+      state.drawPending = false;
+      drawAllLines(state);
+    });
   }
 
   // Moves the points of lines attached to a marker or junction (`key`, see
@@ -1231,10 +1390,10 @@
 
     // Layers of drawing, bottom up: images (Leaflet's overlay pane), areas
     // and circles, the light behind lines under the mouse, lines,
-    // junctions, then markers (Leaflet's marker pane). Lines and junctions
+    // junctions, markers (Leaflet's marker pane), then names. Lines and junctions
     // above areas also take the mouse before them, so a cable under a
     // street can still be pointed at.
-    [['nbmAreas', 410], ['nbmHalo', 415], ['nbmLines', 420], ['nbmJunctions', 430]].forEach(function (pane) {
+    [['nbmAreas', 410], ['nbmHalo', 415], ['nbmLines', 420], ['nbmJunctions', 430], ['nbmLabels', 640]].forEach(function (pane) {
       map.createPane(pane[0]).style.zIndex = pane[1];
     });
 
@@ -1242,7 +1401,7 @@
     var bounds = L.latLngBounds([]);
     var state = {
       map: map, data: data, overlays: {}, markers: {}, shapes: {}, cards: {}, tool: null, bounds: bounds,
-      baseLayers: baseLayers, baseLayer: null,
+      baseLayers: baseLayers, baseLayer: null, edit: edit,
     };
     var names = Object.keys(baseLayers);
     if (names.length) {
@@ -1299,7 +1458,7 @@
           var original = layer[method];
           layer[method] = function () {
             var result = original.apply(this, arguments);
-            if (state.linesReady) { drawAllLines(state); }
+            if (state.linesReady) { drawAllLinesSoon(state); }
             return result;
           };
         });
@@ -1391,14 +1550,9 @@
 
     // Names under the markers. Added once the view is set: a label that is
     // always shown needs the map's position to draw itself.
-    Object.keys(state.markers).forEach(function (id) { addLabel(state.markers[id]); });
+    Object.keys(state.markers).forEach(function (id) { addLabel(state, state.markers[id]); });
     Object.keys(state.shapes).forEach(function (id) {
-      var entry = state.shapes[id];
-      if (entry.label) {
-        entry.layer.bindTooltip(escapeHtml(entry.label), {
-          permanent: true, direction: 'center', interactive: false, className: 'nbm-label nbm-area-label',
-        });
-      }
+      if (state.shapes[id].label) { addAreaLabel(state, state.shapes[id]); }
     });
     state.ready = true;
 
@@ -2261,6 +2415,17 @@
     load();
   }
 
+  // A "Back" button at the top of a menu whose content was replaced (a
+  // search or a form), to go back to the first choice.
+  function backButton(box, back) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn btn-sm btn-ghost-secondary w-100 text-start mb-1';
+    button.innerHTML = '<i class="mdi mdi-arrow-left"></i> Back';
+    button.addEventListener('click', function (click) { L.DomEvent.stop(click); back(); });
+    box.insertBefore(button, box.firstChild);
+  }
+
   // A small menu on the map at containerPoint. Clicks and scrolling inside
   // it don't reach the map.
   function mapMenu(map, containerPoint) {
@@ -2294,24 +2459,31 @@
     }
     function onKey(event) { if (event.key === 'Escape') { close(false); } }
     document.addEventListener('keydown', onKey);
-    var title = L.DomUtil.create('div', 'small text-secondary px-2 pt-1', menu);
-    title.textContent = 'This route is for:';
-    ROUTE_KINDS.forEach(function (entry) {
-      if (!data.search[entry.kind]) { return; }
-      var item = L.DomUtil.create('button', 'btn btn-sm btn-ghost-secondary w-100 text-start', menu);
-      item.type = 'button';
-      item.innerHTML = '<i class="mdi mdi-' + entry.icon + '"></i> ' + entry.text;
-      item.addEventListener('click', function (click) {
-        L.DomEvent.stop(click);
-        searchList(menu, data.search[entry.kind], entry.text.toLowerCase() + 's',
-          function (key) { return data.shapes.some(function (s) { return s.object === key; }); },
-          function (obj, type) { close(true); pick(type, obj.id); });
+    // The first choice: cable, bundle or circuit. Each opens a search,
+    // which has a Back button to this choice; the drawn line is kept.
+    function choices() {
+      menu.innerHTML = '';
+      var title = L.DomUtil.create('div', 'small text-secondary px-2 pt-1', menu);
+      title.textContent = 'This route is for:';
+      ROUTE_KINDS.forEach(function (entry) {
+        if (!data.search[entry.kind]) { return; }
+        var item = L.DomUtil.create('button', 'btn btn-sm btn-ghost-secondary w-100 text-start', menu);
+        item.type = 'button';
+        item.innerHTML = '<i class="mdi mdi-' + entry.icon + '"></i> ' + entry.text;
+        item.addEventListener('click', function (click) {
+          L.DomEvent.stop(click);
+          searchList(menu, data.search[entry.kind], entry.text.toLowerCase() + 's',
+            function (key) { return data.shapes.some(function (s) { return s.object === key; }); },
+            function (obj, type) { close(true); pick(type, obj.id); });
+          backButton(menu, choices);
+        });
       });
-    });
-    var cancelButton = L.DomUtil.create('button', 'btn btn-sm btn-ghost-danger w-100 text-start', menu);
-    cancelButton.type = 'button';
-    cancelButton.innerHTML = '<i class="mdi mdi-close"></i> Cancel';
-    cancelButton.addEventListener('click', function () { close(false); });
+      var cancelButton = L.DomUtil.create('button', 'btn btn-sm btn-ghost-danger w-100 text-start', menu);
+      cancelButton.type = 'button';
+      cancelButton.innerHTML = '<i class="mdi mdi-close"></i> Cancel';
+      cancelButton.addEventListener('click', function () { close(false); });
+    }
+    choices();
   }
 
   var MENU_KINDS = [
@@ -2356,10 +2528,10 @@
       });
     }
 
-    map.on('contextmenu', function (event) {
-      close();
-      var point = fromLatLng(event.latlng);
-      menu = mapMenu(map, event.containerPoint);
+    // The first choice: what to add. Its search or label form has a Back
+    // button to this choice.
+    function choices(point) {
+      menu.innerHTML = '';
       MENU_KINDS.forEach(function (entry) {
         if (entry.kind !== 'label' && !data.search[entry.kind]) { return; }
         var item = L.DomUtil.create('button', 'btn btn-sm btn-ghost-secondary w-100 text-start', menu);
@@ -2370,8 +2542,15 @@
           // click came from the menu: stop it here, or the map would close the menu.
           L.DomEvent.stop(click);
           if (entry.kind === 'label') { labelForm(point); } else { search(entry.kind, point); }
+          backButton(menu, function () { choices(point); });
         });
       });
+    }
+
+    map.on('contextmenu', function (event) {
+      close();
+      menu = mapMenu(map, event.containerPoint);
+      choices(fromLatLng(event.latlng));
     });
     map.on('click movestart', close);
     document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { close(); } });

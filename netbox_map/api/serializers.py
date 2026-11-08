@@ -55,7 +55,7 @@ class MapMarkerSerializer(ChangeLogMessageSerializer, ValidatedModelSerializer):
         model = MapMarker
         fields = (
             'id', 'url', 'display', 'map', 'object_type', 'object_id', 'object', 'label', 'icon', 'color', 'x', 'y',
-            'created', 'last_updated',
+            'label_offset', 'created', 'last_updated',
         )
         brief_fields = ('id', 'url', 'display', 'map', 'object_type', 'object_id')
 
@@ -75,5 +75,5 @@ class MapShapeSerializer(ChangeLogMessageSerializer, ValidatedModelSerializer):
     class Meta:
         model = MapShape
         fields = ('id', 'url', 'display', 'map', 'kind', 'label', 'color', 'points', 'radius', 'link', 'object_type',
-                  'object_id', 'object', 'level', 'ends', 'smooth', 'created', 'last_updated')
+                  'object_id', 'object', 'level', 'ends', 'smooth', 'label_position', 'created', 'last_updated')
         brief_fields = ('id', 'url', 'display', 'map', 'kind', 'label')
