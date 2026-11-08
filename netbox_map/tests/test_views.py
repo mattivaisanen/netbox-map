@@ -62,6 +62,7 @@ class MapViewTests(TestCase):
         response = self.client.get(reverse('plugins:netbox_map:asset', args=['map.js']))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'text/javascript')
+        self.assertEqual(self.client.get(reverse('plugins:netbox_map:asset', args=['export.js'])).status_code, 200)
         self.assertEqual(self.client.get(reverse('plugins:netbox_map:asset', args=['secret.py'])).status_code, 404)
 
     def test_map_page_has_map_and_editor(self):
@@ -70,6 +71,7 @@ class MapViewTests(TestCase):
         response = self.client.get(map_.get_absolute_url() + '?edit=1')
         self.assertContains(response, 'id="nbm-map-data"')
         self.assertContains(response, 'data-nbm-draw="area"')
+        self.assertContains(response, 'export.js')
 
     def test_show_on_map_falls_back_to_the_rack(self):
         device = make_device()

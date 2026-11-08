@@ -4,6 +4,8 @@
 
 New:
 
+- Save a map as a PNG, SVG or PDF file with the download button under the
+  zoom buttons. The file shows the map as it is on the screen.
 - Maps, with a world map or an image as the base layer. A map can sit under
   another map and be assigned to a region, site group, site or location.
 - Overlays: PNG, JPEG, GIF, WebP or SVG images on a map, with opacity and

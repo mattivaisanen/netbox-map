@@ -14,7 +14,8 @@ Maps are drawn and edited right in NetBox: drag devices into place, draw
 room outlines, and line a floor plan up with the world map below it. Rest
 the mouse on a device, rack or cable to see its details, filter what is
 shown from the side panel, switch between street and satellite views, and
-turn a map so it matches how the building is laid out.
+turn a map so it matches how the building is laid out. Any map can be saved
+as a PNG, SVG or PDF file, exactly as it is shown.
 
 ## What you can put on a map
 

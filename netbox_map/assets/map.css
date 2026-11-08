@@ -25,6 +25,10 @@
 .nbm-menu { position: absolute; z-index: 1000; width: 16rem; max-height: 22rem; overflow-y: auto; }
 .nbm-menu .list-group-item:disabled { opacity: .55; }
 .leaflet-bar a.nbm-fit { font-size: 18px; line-height: 30px; }
+/* Saving the map as a file (export.js): a button with a menu beside it. */
+.nbm-export { position: relative; }
+.leaflet-bar a.nbm-export-button { font-size: 18px; line-height: 30px; }
+.nbm-export-menu { top: 0; left: 100%; margin-left: .25rem; min-width: 10rem; }
 .nbm-handle-mid { width: 10px !important; height: 10px !important; margin: -5px 0 0 -5px !important; border-radius: 50%; opacity: .8; }
 .nbm-shape-link { cursor: pointer; }
 .nbm-search { width: 16rem; max-width: 50vw; }
