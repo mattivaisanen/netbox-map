@@ -110,4 +110,6 @@ does.
 
 Apache License 2.0, see [LICENSE](LICENSE). Includes
 [Leaflet](https://leafletjs.com) 1.9.4 (BSD 2-Clause, see
-`netbox_map/assets/LICENSE-leaflet.txt`).
+`netbox_map/assets/LICENSE-leaflet.txt`) and
+[MapLibre GL JS](https://maplibre.org) 5.24.0 (BSD 3-Clause, see
+`netbox_map/assets/LICENSE-maplibre.txt`).

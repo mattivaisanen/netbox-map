@@ -1,6 +1,6 @@
 """
-Serves the map's JavaScript and CSS (Leaflet, map.js and export.js) from the plugin's
-own folder.
+Serves the map's JavaScript and CSS (Leaflet, MapLibre GL for vector
+backgrounds, map.js and export.js) from the plugin's own folder.
 
 They are not Django static files on purpose: static files only reach the
 web server after `collectstatic`, which a plugin installed or updated in a
@@ -21,6 +21,9 @@ FILES = {
     'map.js': 'text/javascript',
     'export.js': 'text/javascript',
     'map.css': 'text/css',
+    # Loaded by map.js only when a vector background is shown.
+    'maplibre-gl.js': 'text/javascript',
+    'maplibre-gl.css': 'text/css',
 }
 
 

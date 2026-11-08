@@ -114,6 +114,17 @@
     return number(opacity);
   }
 
+  // CSS filters on `element` and the elements around it (a vector
+  // background's gray, for one), as one filter.
+  function filterOf(element, root) {
+    var filters = [];
+    for (var node = element; node && node !== root; node = node.parentElement) {
+      var filter = getComputedStyle(node).filter;
+      if (filter && filter !== 'none') { filters.push(filter); }
+    }
+    return filters.join(' ');
+  }
+
   function onScreen(box, origin) {
     return box.width > 0 && box.height > 0 && box.right > origin.left && box.left < origin.right &&
       box.bottom > origin.top && box.top < origin.bottom;
@@ -360,8 +371,19 @@
     if (!onScreen(box, this.origin)) { return; }
     var w = canvas.offsetWidth;
     var h = canvas.offsetHeight;
+    var filter = filterOf(canvas, this.root);
+    var source = canvas;
+    if (filter) {
+      // Drawn once more with the filter, which an SVG file wouldn't keep.
+      source = document.createElement('canvas');
+      source.width = canvas.width;
+      source.height = canvas.height;
+      var ctx = source.getContext('2d');
+      ctx.filter = filter;
+      ctx.drawImage(canvas, 0, 0);
+    }
     this.parts.push('<image transform="' + placement(canvas, this.root, this.origin, w, h, box) + '" width="' + w +
-      '" height="' + h + '" preserveAspectRatio="none" xlink:href="' + canvas.toDataURL('image/png') + '"/>');
+      '" height="' + h + '" preserveAspectRatio="none" xlink:href="' + source.toDataURL('image/png') + '"/>');
   };
 
   // An HTML element's background and border (a marker's pin, a name's backing).

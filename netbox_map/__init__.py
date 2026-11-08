@@ -23,19 +23,23 @@ class NetBoxMapConfig(PluginConfig):
     default_settings = {
         # Background layers of world maps; users switch between them in the
         # map's sidebar. Any tile server with the usual {z}/{x}/{y} layout
-        # works, including one inside your own network. max_zoom is the
-        # server's highest level: the map zooms further in by enlarging the
-        # last tiles. Other keys are passed to Leaflet's tile layer.
+        # works, including one inside your own network, and so does a vector
+        # map given as a MapLibre `style`. max_zoom is the server's highest
+        # level: the map zooms further in by enlarging the last tiles. Other
+        # keys are passed to Leaflet's tile layer.
         'base_layers': [
             {
-                # Light gray, no names: CARTO's Positron without labels. No
-                # key is needed; see CARTO's terms for commercial use.
+                # Light gray, no names, sharp at every zoom: OpenFreeMap's
+                # Positron vector map without its labels, in gray. No key
+                # is needed; commercial use is allowed with attribution.
                 'name': 'Simple',
-                'url': 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
-                'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors '
-                               '&copy; <a href="https://carto.com/attributions">CARTO</a>',
-                'subdomains': 'abcd',
-                'max_zoom': 20,
+                'style': 'https://tiles.openfreemap.org/styles/positron',
+                'labels': False,
+                'filter': 'grayscale(1)',
+                'attribution': '<a href="https://openfreemap.org">OpenFreeMap</a> '
+                               '&copy; <a href="https://www.openmaptiles.org/">OpenMapTiles</a> '
+                               'Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                'max_zoom': 22,
             },
             {
                 'name': 'Regular',

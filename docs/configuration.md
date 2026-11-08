@@ -20,12 +20,14 @@ Each entry of `base_layers` is one background:
 | Key | Description |
 |---|---|
 | `name` | Shown on the layer's button. |
-| `url` | Tile address, with `{z}`, `{x}` and `{y}` where the zoom level and tile numbers go. `{s}` (subdomain) and `{r}` (`@2x` on high-resolution screens) also work. |
+| `url` | For a tile server: the tile address, with `{z}`, `{x}` and `{y}` where the zoom level and tile numbers go. `{s}` (subdomain) and `{r}` (`@2x` on high-resolution screens) also work. |
 | `attribution` | Credit shown in the map's corner. HTML is allowed. Most tile servers require one. |
 | `max_zoom` | Highest zoom level the server offers (default 19). Maps zoom in further, to level 22, by enlarging the last tiles. Zooming goes in half steps. |
-| `filter` | A CSS filter for the layer's tiles, such as `'grayscale(1) contrast(0.9)'` for a plain, colorless street map. |
+| `style` | For a vector map, instead of `url`: the address of a [MapLibre style](https://maplibre.org/maplibre-style-spec/). Vector maps stay sharp at every zoom. The browser loads MapLibre GL (bundled with the plugin) the first time one is shown. |
+| `labels` | Vector maps only. `False` leaves out all names and icons. Default `True`. |
+| `filter` | A CSS filter for the layer, such as `'grayscale(1) contrast(0.9)'` for a plain, colorless map. |
 
-Other keys go to Leaflet's
+For tile servers, other keys go to Leaflet's
 [tile layer options](https://leafletjs.com/reference.html#tilelayer-option),
 such as `subdomains`.
 
@@ -33,13 +35,9 @@ The defaults are:
 
 | Name | Source | Terms |
 |---|---|---|
-| Simple | CARTO Positron without labels | No key needed. [CARTO basemap terms](https://carto.com/basemaps): free for light, non-commercial use; commercial use needs a CARTO license. |
+| Simple | OpenFreeMap Positron (vector), without names, in gray | No key or registration. [OpenFreeMap](https://openfreemap.org): free, also for commercial use, with attribution. |
 | Regular | OpenStreetMap | [Tile usage policy](https://operations.osmfoundation.org/policies/tiles/): free for light use. |
 | Satellite | Esri World Imagery | [Esri terms of use](https://www.esri.com/en-us/legal/terms/full-master-agreement). |
-
-For a plain map under OpenStreetMap's own terms only, use OpenStreetMap
-tiles with `'filter': 'grayscale(1)'`: the colors go, the street names
-stay.
 
 Check that the terms fit how your organization uses NetBox. To use other
 sources, or only some of these, list them yourself:

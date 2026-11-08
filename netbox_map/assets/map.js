@@ -16,6 +16,10 @@
   // How far a world map zooms in, beyond the tile server's own levels.
   var MAX_ZOOM = 22;
 
+  // This file's address: MapLibre (for vector backgrounds) is loaded from
+  // beside it, only when such a background is first shown.
+  var SCRIPT_URL = document.currentScript ? document.currentScript.src : '';
+
   function toLatLng(x, y) { return L.latLng(y, x); }
   function fromLatLng(latlng) { return { x: latlng.lng, y: latlng.lat }; }
 
@@ -482,6 +486,152 @@
       L.DomUtil.setPosition(el, this._getTilePos(coords));
       el.style.transformOrigin = '0 0';
       el.style.transform += ' rotate(' + this._crs().nbmDegrees + 'deg)';
+    },
+  });
+
+  // Loads MapLibre GL (maplibre-gl.js and .css, served beside this file)
+  // once. Resolves when window.maplibregl is ready.
+  var maplibreLoading = null;
+  function loadMaplibre() {
+    if (window.maplibregl) { return Promise.resolve(); }
+    if (!maplibreLoading) {
+      maplibreLoading = new Promise(function (resolve, reject) {
+        var css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = SCRIPT_URL.replace('/map.js', '/maplibre-gl.css');
+        document.head.appendChild(css);
+        var script = document.createElement('script');
+        script.src = SCRIPT_URL.replace('/map.js', '/maplibre-gl.js');
+        script.onload = function () { resolve(); };
+        script.onerror = function () { maplibreLoading = null; reject(new Error('MapLibre did not load')); };
+        document.head.appendChild(script);
+      });
+    }
+    return maplibreLoading;
+  }
+
+  // A vector background (a `style` in base_layers), drawn by MapLibre GL
+  // in a canvas the size of the map, kept in step with Leaflet's view.
+  // Vector maps stay sharp at every zoom. Options: `style` (a MapLibre
+  // style URL), `labels: false` to leave out all names, `filter` (CSS, as
+  // for tiles), `rotation` (a turned map's angle) and the layer's offset
+  // (setOffset, as for tiles).
+  var VectorLayer = L.Layer.extend({
+    options: { pane: 'tilePane' },
+    nbmOffset: null,
+
+    initialize: function (options) { L.Util.setOptions(this, options); },
+
+    onAdd: function (map) {
+      if (!this._container) {
+        this._container = L.DomUtil.create('div', 'nbm-vector leaflet-zoom-animated');
+        if (this.options.filter) { this._container.style.filter = this.options.filter; }
+      }
+      this.getPane().appendChild(this._container);
+      this._place();
+      var self = this;
+      loadMaplibre().then(function () { return self._loadStyle(); }).then(function (style) {
+        if (self._map && !self._gl) { self._start(style); }
+      }).catch(function (error) {
+        // The rest of the map works without its background: say so quietly.
+        if (window.console) { window.console.warn('Background did not load:', error); }
+      });
+    },
+
+    onRemove: function () {
+      if (this._gl) { this._gl.remove(); this._gl = null; }
+      L.DomUtil.remove(this._container);
+    },
+
+    getEvents: function () {
+      return { move: this._sync, zoomend: this._sync, viewreset: this._sync, resize: this._resize, zoomanim: this._animateZoom };
+    },
+
+    setOffset: function (offset) {
+      this.nbmOffset = offset;
+      this._sync();
+      return this;
+    },
+
+    // The style, fetched once. Without labels, every text and icon layer
+    // is left out (MapLibre draws names as "symbol" layers).
+    _loadStyle: function () {
+      var options = this.options;
+      if (!this._style) {
+        this._style = fetch(options.style, { referrerPolicy: 'strict-origin-when-cross-origin' })
+          .then(function (response) {
+            if (!response.ok) { throw new Error('Background style: ' + response.status); }
+            return response.json();
+          })
+          .then(function (style) {
+            if (options.labels === false) {
+              style.layers = style.layers.filter(function (layer) { return layer.type !== 'symbol'; });
+            }
+            return style;
+          });
+      }
+      return this._style;
+    },
+
+    _start: function (style) {
+      this._gl = new window.maplibregl.Map(L.Util.extend({
+        container: this._container,
+        style: style,
+        interactive: false,
+        attributionControl: false,
+        fadeDuration: 0,
+        maxZoom: 24,
+        // Keeps the drawn picture readable, so saving the map as a file
+        // (export.js) gets the background too.
+        canvasContextAttributes: { preserveDrawingBuffer: true },
+        // Leaflet can show the poles' edges; MapLibre would refuse to.
+        renderWorldCopies: true,
+      }, this._view()));
+      if (this._gl.setTransformConstrain) {
+        this._gl.setTransformConstrain(function (center, zoom) { return { center: center, zoom: zoom }; });
+      }
+    },
+
+    // Where MapLibre should look: Leaflet's center, moved back by the
+    // layer's offset; MapLibre's zoom is one less (512-pixel tiles); a
+    // turned map turns it the other way round (bearing is the direction
+    // at the top).
+    _view: function () {
+      var map = this._map;
+      var center = map.getCenter();
+      var o = this.nbmOffset;
+      if (o && (o[0] || o[1])) {
+        center = L.latLng(center.lat - o[1] / 111320, center.lng - o[0] / (111320 * Math.cos(center.lat * Math.PI / 180)));
+      }
+      return { center: [center.lng, center.lat], zoom: map.getZoom() - 1, bearing: -(this.options.rotation || 0) };
+    },
+
+    // The canvas covers the map's visible area.
+    _place: function () {
+      var size = this._map.getSize();
+      this._container.style.width = size.x + 'px';
+      this._container.style.height = size.y + 'px';
+      L.DomUtil.setPosition(this._container, this._map.containerPointToLayerPoint([0, 0]));
+    },
+
+    _sync: function () {
+      if (!this._map) { return; }
+      this._place();
+      if (this._gl) { this._gl.jumpTo(this._view()); }
+    },
+
+    _resize: function () {
+      this._place();
+      if (this._gl) { this._gl.resize(); this._gl.jumpTo(this._view()); }
+    },
+
+    // During Leaflet's zoom animation the drawn canvas is scaled like an
+    // image, then drawn again at the new zoom (zoomend).
+    _animateZoom: function (event) {
+      var map = this._map;
+      var corner = map.layerPointToLatLng(map.containerPointToLayerPoint([0, 0]));
+      var offset = map._latLngToNewLayerPoint(corner, event.zoom, event.center);
+      L.DomUtil.setTransform(this._container, offset, map.getZoomScale(event.zoom));
     },
   });
 
@@ -1383,7 +1533,9 @@
       delete tileOptions.name;
       delete tileOptions.url;
       delete tileOptions.max_zoom;
-      var tiles = new (rotation ? TurnedTileLayer : MapTileLayer)(layer.url, tileOptions);
+      var tiles = layer.style
+        ? new VectorLayer(L.Util.extend(tileOptions, { rotation: rotation }))
+        : new (rotation ? TurnedTileLayer : MapTileLayer)(layer.url, tileOptions);
       tiles.nbmOffset = (data.layer_offsets || {})[layer.name] || null;
       baseLayers[layer.name] = tiles;
     });
