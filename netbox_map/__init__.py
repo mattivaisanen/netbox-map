@@ -68,6 +68,10 @@ class NetBoxMapConfig(PluginConfig):
         # junction. Hex, such as '4caf50'. Unset kinds keep the built-in
         # look (status colors for markers and cables).
         'default_colors': {},
+        # A colored dot on device markers showing how fresh a value on the
+        # device is, such as when it last answered. Off until `field` is
+        # set; see health.py for the keys and their defaults.
+        'device_health': {},
     }
 
     menu = 'navigation.menu'

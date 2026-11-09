@@ -1,11 +1,14 @@
+from datetime import timedelta
+
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from netbox.plugins import get_plugin_config
 
-from dcim.models import CableBundle, Rack
+from dcim.models import CableBundle, Device, Rack
 
 from ..models import Map, MapMarker, MapShape
 from .utils import make_device, make_map, make_site, make_user
@@ -148,3 +151,28 @@ class MapViewTests(TestCase):
         marker = MapMarker.objects.create(map=make_map(), object=device, x=1, y=2)
         data = self.client.get(reverse('plugins:netbox_map:marker_data', args=[marker.pk])).json()
         self.assertEqual((data['label'], data['object'], data['status']), (device.name, f'dcim.device:{device.pk}', 'green'))
+
+    def test_device_health_dot(self):
+        device = make_device()
+        marker = MapMarker.objects.create(map=make_map(), object=device, x=1, y=2)
+        url = reverse('plugins:netbox_map:marker_data', args=[marker.pk])
+        # Off until a field is set.
+        self.assertIsNone(self.client.get(url).json()['health'])
+
+        def dot(value, **health):
+            data = {'last_seen': value} if value is not None else {}
+            Device.objects.filter(pk=device.pk).update(custom_field_data=data)
+            config = {'netbox_map': {'device_health': {'field': 'cf.last_seen', **health}}}
+            with self.settings(PLUGINS_CONFIG=config):
+                return self.client.get(url).json()['health']
+
+        # Minutes since the device was last seen, against the default levels (5, 15).
+        self.assertEqual(dot(2), {'color': '#4caf50', 'title': 'Last seen: 2 min ago'})
+        self.assertEqual(dot('10')['color'], '#ff9800')
+        self.assertEqual(dot(60)['color'], '#f44336')
+        # A time is turned into its age; own levels and unit.
+        recent = (timezone.now() - timedelta(seconds=30)).isoformat()
+        self.assertEqual(dot(recent, levels=[[1, '00ff00']], unit='hours')['color'], '#00ff00')
+        # No value: grey, or no dot at all.
+        self.assertEqual(dot(None)['title'], 'Last seen: no value')
+        self.assertIsNone(dot(None, missing=''))

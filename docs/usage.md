@@ -161,6 +161,12 @@ A marker is one NetBox object at a point on the map, or a text label:
   without the `mdi-` prefix.
 - **Position:** x and y. Leave them empty to place the marker later.
 
+Devices can also show a small colored dot on their marker, telling how
+fresh a value on the device is, such as when it last answered a
+monitoring check. Rest the mouse on the dot to see the age. It is set up
+by an administrator; see `device_health` in
+[configuration](configuration.md#device-health).
+
 Each object can be on a map once, and on any number of maps. When an object
 is deleted from NetBox, its markers are removed from every map.
 
