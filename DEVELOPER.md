@@ -157,6 +157,14 @@ out). The page embeds it with `json_script` and calls
   a marker without a color takes its kind's default before its status
   color; a shape still in the color new shapes get (`DEFAULT_COLOR`) takes
   its kind's default.
+- **Device health** (`health.py`, setting `device_health`): `viewer._marker()`
+  adds `health` ({color, title} or None) to device markers. The setting is
+  read once per map (`health.settings()`, defaults filled in). Custom
+  fields are read from `custom_field_data` directly rather than `obj.cf`,
+  which would look up the field definitions. A number is an age in `unit`;
+  a date or time (object or ISO text) is aged against now. `markerIcon()`
+  draws the dot as a sibling of the pin, not inside it, so a turned pin
+  (map links) doesn't turn it; export.js draws it like any other box.
 - **Maps page:** `MapListView` renders NetBox's table or, with `?view=grid`,
   cards (`inc/map_card.html`) of the filtered maps. The choice is kept in
   the user's NetBox preferences (`plugins.netbox_map.maps_view`).

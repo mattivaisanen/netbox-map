@@ -7,6 +7,7 @@ Settings live under `PLUGINS_CONFIG['netbox_map']` in NetBox's
 |---|---|---|---|
 | `base_layers` | list | Simple, Regular, Satellite (see below) | Backgrounds of world maps. Users switch between them in the map's side panel. Empty list: world maps have no background. |
 | `default_colors` | dict | `{}` | Colors for markers and shapes that have none of their own, by kind. See below. |
+| `device_health` | dict | `{}` (off) | A small colored dot on device markers showing how fresh a value on the device is. See below. |
 | `geocoder_url` | string | `'https://nominatim.openstreetmap.org/search'` | Address of a [Nominatim](https://nominatim.org)-compatible search, used by the place box in the map editor. The browser calls it directly. Empty: the box accepts only coordinates. |
 | `hover_fields` | dict | `{}` | Details on the card shown when the mouse rests on a marker or a cable route, per object type. See below. |
 | `rack_elevation` | boolean | `True` | Show a rack's front elevation on its card. |
@@ -120,3 +121,47 @@ PLUGINS_CONFIG = {
 }
 ```
 
+
+## Device health
+
+`device_health` puts a small colored dot on the corner of every device
+marker. The dot shows how old a value on the device is, for example the
+last time a monitoring job reached it. The plugin only reads the value;
+anything can fill it: a custom field set by a script, another plugin, or
+a person. Resting the mouse on the dot shows the field and the age.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `field` | string | `''` | Where the value is: `cf.` and a custom field's name, or a path through the device's attributes with dots. Empty: no dots. |
+| `label` | string | the field's name | Shown before the age in the dot's tooltip. |
+| `unit` | string | `'minutes'` | Unit of numeric values: `seconds`, `minutes`, `hours` or `days`. |
+| `levels` | list | `[[5, '4caf50'], [15, 'ff9800']]` | `[age, color]` pairs, in `unit`. The first level the age is at or below gives the color. |
+| `over` | string | `'f44336'` | Color when the age is above every level. |
+| `missing` | string | `'9e9e9e'` | Color when the device has no value, or one that can't be read. `''`: no dot. |
+
+The value can be:
+
+- **A number:** the age itself, in `unit` (such as minutes since the
+  device last answered). Numbers stored as text work too.
+- **A date or a date and time** (a custom field of that type, or ISO 8601
+  text): its age from now. Times without a time zone are in NetBox's
+  `TIME_ZONE`.
+
+Colors are hex, such as `'4caf50'`. The dots show the values as they were
+when the map was opened; reload the page to update them. Custom fields
+cost nothing extra to read; a path through related objects may cost one
+query per device.
+
+```python
+PLUGINS_CONFIG = {
+    'netbox_map': {
+        'device_health': {
+            'field': 'cf.backup_age',
+            'label': 'Last backup',
+            'unit': 'hours',
+            'levels': [[24, '2e7d32'], [72, 'f9a825']],
+            'over': 'c62828',
+        },
+    },
+}
+```
