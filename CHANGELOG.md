@@ -4,6 +4,10 @@
 
 New:
 
+- Device health dots: a small green, orange or red dot on device markers,
+  from how old a value on the device is (a number such as minutes since
+  last contact, or a date and time). Pick the field, unit, limits and
+  colors with the `device_health` setting. Off by default.
 - Fixed: world maps had no picture in the maps grid, only an icon. They
   now show a small map of their start view, or of everything on them,
   with their images on top.
