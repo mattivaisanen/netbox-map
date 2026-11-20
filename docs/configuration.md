@@ -31,6 +31,10 @@ For tile servers, other keys go to Leaflet's
 [tile layer options](https://leafletjs.com/reference.html#tilelayer-option),
 such as `subdomains`.
 
+The pictures of world maps on the maps page (grid view) use the first
+background with a `url`; vector backgrounds are skipped there because they
+are too heavy to draw once per card.
+
 The defaults are:
 
 | Name | Source | Terms |

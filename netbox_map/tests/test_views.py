@@ -143,6 +143,17 @@ class MapViewTests(TestCase):
         response = self.client.get(reverse('plugins:netbox_map:map_list') + '?view=list')
         self.assertNotContains(response, 'nbm-map-card')
 
+    def test_world_maps_get_a_picture_in_the_grid(self):
+        map_ = make_map(name='Harbour')
+        MapMarker.objects.create(map=map_, label='Quay', x=24.95, y=60.16)
+        MapMarker.objects.create(map=map_, label='Gate', x=24.96, y=60.17)
+        make_map(name='Floor', base_layer='image')
+        response = self.client.get(reverse('plugins:netbox_map:map_list') + '?view=grid')
+        # Tiles of the first tile background (the vector one is skipped), zoomed in on the markers.
+        self.assertContains(response, 'class="nbm-thumb-picture"', count=1)
+        self.assertContains(response, 'https://tile.openstreetmap.org/12/')
+        self.assertContains(response, 'nbm-thumb-credit')
+
     def test_marker_data_for_the_editor(self):
         device = make_device()
         marker = MapMarker.objects.create(map=make_map(), object=device, x=1, y=2)

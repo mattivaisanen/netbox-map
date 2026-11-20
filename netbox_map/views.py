@@ -10,7 +10,7 @@ from netbox.object_actions import AddObject, BulkDelete, BulkExport
 from netbox.views import generic
 from utilities.views import register_model_view
 
-from . import cards, filtersets, forms, tables, viewer
+from . import cards, filtersets, forms, tables, thumbnails, viewer
 from .models import Map, MapMarker, MapOverlay, MapShape
 
 
@@ -53,10 +53,18 @@ class MapListView(generic.ObjectListView):
             .prefetch_related(Prefetch('overlays', queryset=MapOverlay.objects.order_by('weight', 'pk')), 'scope')
         )
         maps = list(maps[:self.GRID_LIMIT + 1])
+        more_maps = len(maps) > self.GRID_LIMIT
+        maps = maps[:self.GRID_LIMIT]
+        # Pictures of world maps, from the first tile background.
+        layer = thumbnails.add_thumbnails(maps)
         return {
             'view': 'grid',
-            'maps': maps[:self.GRID_LIMIT],
-            'more_maps': len(maps) > self.GRID_LIMIT,
+            'maps': maps,
+            'more_maps': more_maps,
+            # Credit for the tiles in the pictures, shown once under the grid.
+            'thumbnail_attribution': layer['attribution'] if layer and any(
+                getattr(m, 'thumbnail', None) for m in maps
+            ) else '',
         }
 
 

@@ -36,6 +36,9 @@
           <div class="col-12 text-secondary">{% trans "No maps found." %}</div>
         {% endfor %}
       </div>
+      {% if thumbnail_attribution %}
+        <div class="text-secondary small mt-2 nbm-thumb-credit">{% trans "Map pictures:" %} {{ thumbnail_attribution|safe }}</div>
+      {% endif %}
       {% if more_maps %}
         <div class="text-secondary small mt-2">
           {% blocktrans trimmed with count=maps|length %}Showing the first {{ count }} maps. Use the filters to find others.{% endblocktrans %}

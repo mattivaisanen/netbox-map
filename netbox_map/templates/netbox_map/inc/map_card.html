@@ -1,8 +1,25 @@
 {% load i18n %}
-{# One map in the maps grid: its first image (or an icon), name, place and contents. #}
+{% comment %}
+  One map in the maps grid: a picture (world map tiles with the map's images,
+  or its first image, or an icon), name, place and contents.
+{% endcomment %}
 <div class="col-sm-6 col-lg-4 col-xl-3">
   <div class="card card-sm nbm-map-card h-100">
     <a href="{{ map.get_absolute_url }}" class="nbm-map-thumb">
+      {% if map.thumbnail %}
+        {% with thumb=map.thumbnail %}
+          <div class="nbm-thumb-picture" aria-hidden="true">
+            {% for tile in thumb.tiles %}
+              <img src="{{ tile.url }}" alt="" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"
+                   style="left:{{ tile.left }}px;top:{{ tile.top }}px;width:{{ thumb.size|add:1 }}px;height:{{ thumb.size|add:1 }}px;{% if thumb.filter %}filter:{{ thumb.filter }};{% endif %}">
+            {% endfor %}
+            {% for overlay in thumb.overlays %}
+              <img src="{{ overlay.url }}" alt="" loading="lazy"
+                   style="left:{{ overlay.left }}px;top:{{ overlay.top }}px;width:{{ overlay.width }}px;height:{{ overlay.height }}px;opacity:{{ overlay.opacity|stringformat:'.2f' }};">
+            {% endfor %}
+          </div>
+        {% endwith %}
+      {% else %}
       {% with overlay=map.overlays.all.0 %}
         {% if overlay %}
           <img src="{{ overlay.image.url }}" alt="" loading="lazy">
@@ -10,6 +27,7 @@
           <i class="mdi {% if map.base_layer == 'image' %}mdi-image-outline{% else %}mdi-earth{% endif %}" aria-hidden="true"></i>
         {% endif %}
       {% endwith %}
+      {% endif %}
     </a>
     <div class="card-body">
       <div class="fw-bold text-truncate"><a href="{{ map.get_absolute_url }}">{{ map.name }}</a></div>
