@@ -8,6 +8,12 @@
 {% block head %}
   {{ block.super }}
   <link rel="stylesheet" href="{% map_asset 'map.css' %}">
+  {% if view == 'grid' %}
+    {# Leaflet and map.js draw the pictures of the maps. #}
+    <link rel="stylesheet" href="{% map_asset 'leaflet.css' %}">
+    <script src="{% map_asset 'leaflet.js' %}"></script>
+    <script src="{% map_asset 'map.js' %}"></script>
+  {% endif %}
 {% endblock %}
 
 {% block extra_controls %}
@@ -37,7 +43,7 @@
         {% endfor %}
       </div>
       {% if thumbnail_attribution %}
-        <div class="text-secondary small mt-2 nbm-thumb-credit">{% trans "Map pictures:" %} {{ thumbnail_attribution|safe }}</div>
+        <div class="text-secondary small mt-2 nbm-thumb-credit">{% trans "Map pictures:" %} <span>{{ thumbnail_attribution|safe }}</span></div>
       {% endif %}
       {% if more_maps %}
         <div class="text-secondary small mt-2">
@@ -45,6 +51,13 @@
         </div>
       {% endif %}
     </div>
+    {{ thumbnail_data|json_script:"nbm-thumbnail-data" }}
+    <script>
+      NetBoxMap.thumbnails(
+        document.getElementById('object-list'),
+        JSON.parse(document.getElementById('nbm-thumbnail-data').textContent)
+      );
+    </script>
     {# The filters tab works the same in both views. #}
     {% if filter_form %}
       <div class="tab-pane show" id="filters-form" role="tabpanel" aria-labelledby="filters-form-tab">
