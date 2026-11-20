@@ -15,6 +15,7 @@ from django.utils.http import urlencode
 
 from netbox.plugins import get_plugin_config
 
+from . import health
 from .choices import BaseLayerChoices
 from .models import MapMarker
 
@@ -86,8 +87,11 @@ def _sees(obj, user, visible):
     return (type(obj), obj.pk) in visible
 
 
-def _marker(marker, user, visible=None):
-    """One marker for the browser, or None when the user may not see its object."""
+def _marker(marker, user, visible=None, health_config=None):
+    """
+    One marker for the browser, or None when the user may not see its object.
+    `health_config` is health.settings() read once per map ({} when off); None: read it here.
+    """
     obj = marker.object
     if marker.object_type_id and not _sees(obj, user, visible):
         return None
@@ -109,8 +113,19 @@ def _marker(marker, user, visible=None):
         'icon': marker.icon or DEFAULT_ICONS.get(type_label, OBJECT_ICON if obj is not None else LABEL_ICON),
         'color': f'#{marker.color}' if marker.color else None,
         'status': status_color or ('secondary' if obj is not None else None),
+        # The device health dot (setting `device_health`), or None.
+        'health': _health(obj, type_label, health_config),
         'edit_url': reverse('plugins:netbox_map:mapmarker_edit', args=[marker.pk]),
     }
+
+
+def _health(obj, type_label, config=None):
+    """The health dot of a device marker; other markers have none."""
+    if obj is None or type_label != 'dcim.device':
+        return None
+    if config is None:
+        config = health.settings()
+    return health.device_health(obj, config) if config else None
 
 
 def _overlay(overlay):
@@ -234,7 +249,8 @@ def map_data(map_, request, highlight=None):
     visible = visible_objects(
         [m.object for m in markers if m.object_type_id] + [s.object for s in shapes if s.object_type_id], user
     )
-    markers = [data for data in (_marker(marker, user, visible) for marker in markers) if data]
+    health_config = health.settings() or {}
+    markers = [data for data in (_marker(marker, user, visible, health_config) for marker in markers) if data]
     return_url = map_.get_absolute_url()
     return {
         'id': map_.pk,

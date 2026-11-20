@@ -66,9 +66,15 @@
     if (marker.square) { classes += ' nbm-pin-square'; }
     if (highlighted) { classes += ' nbm-pin-highlight'; }
     var style = color ? ' style="background-color:' + color + ';color:#fff"' : '';
+    // Device health (setting device_health): a small dot on the pin's corner,
+    // beside the pin rather than in it, so turned pins don't turn it.
+    var dot = marker.health
+      ? '<span class="nbm-health" style="background-color:' + escapeHtml(marker.health.color) + '" title="' +
+        escapeHtml(marker.health.title) + '"></span>'
+      : '';
     return L.divIcon({
       className: 'nbm-marker',
-      html: '<span class="' + classes + '"' + style + '><i class="mdi mdi-' + escapeHtml(marker.icon) + '"></i></span>',
+      html: '<span class="' + classes + '"' + style + '><i class="mdi mdi-' + escapeHtml(marker.icon) + '"></i></span>' + dot,
       iconSize: [30, 30],
       iconAnchor: [15, 15],
       tooltipAnchor: [0, 13],

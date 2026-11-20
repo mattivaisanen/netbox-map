@@ -9,6 +9,9 @@
 .nbm-pin-square { border-radius: 3px; }
 .nbm-pin-link { border-radius: 4px; transform: rotate(45deg); width: 26px; height: 26px; margin: 2px; }
 .nbm-pin-link i { transform: rotate(-45deg); }
+/* Device health dot (device_health setting), on the pin's top-right corner. */
+.nbm-health { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 0 2px rgba(0, 0, 0, .5); }
 .nbm-pin-highlight { outline: 3px solid var(--tblr-primary, #00d1b2); outline-offset: 2px; animation: nbm-pulse 1.4s ease-in-out infinite; }
 @keyframes nbm-pulse { 50% { outline-offset: 7px; } }
 .nbm-handle { background: #fff; border: 2px solid var(--tblr-primary, #00d1b2); border-radius: 2px; }

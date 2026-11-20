@@ -24,6 +24,9 @@ as a PNG, SVG or PDF file, exactly as it is shown.
 - **Markers:** any NetBox object at a point: devices, racks, sites,
   locations, power panels, circuits, and other maps. A marker for another
   map opens that map. A marker can also be just a text label.
+- **Device health:** an optional colored dot on device markers, green to
+  red by how old a value on the device is, such as the time it last
+  answered a monitoring check. Any custom field can drive it.
 - **Shapes:** lines, areas and circles, for room outlines or coverage
   areas, and junctions (manholes, cable wells, poles) that cables run
   through.
