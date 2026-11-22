@@ -136,7 +136,7 @@ def build(map_, points, overlays, layer):
         left, top = project(overlay.x_min, overlay.y_max, zoom)
         right, bottom = project(overlay.x_max, overlay.y_min, zoom)
         placed.append({
-            'url': overlay.image.url,
+            'url': overlay.image_url,
             'opacity': overlay.opacity / 100,
             'left': round(left - origin_x), 'top': round(top - origin_y),
             'width': max(1, round(right - left)), 'height': max(1, round(bottom - top)),

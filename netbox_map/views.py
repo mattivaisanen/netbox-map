@@ -1,5 +1,9 @@
+import logging
+import mimetypes
+import os
+
 from django.db.models import Count, Prefetch
-from django.http import Http404, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils.http import urlencode
@@ -8,10 +12,12 @@ from django.views.generic import View
 
 from netbox.object_actions import AddObject, BulkDelete, BulkExport
 from netbox.views import generic
-from utilities.views import register_model_view
+from utilities.views import ConditionalLoginRequiredMixin, register_model_view
 
 from . import cards, filtersets, forms, tables, thumbnails, viewer
 from .models import Map, MapMarker, MapOverlay, MapShape
+
+logger = logging.getLogger(__name__)
 
 
 #
@@ -189,6 +195,33 @@ class MapOverlayBulkDeleteView(generic.BulkDeleteView):
     table = tables.MapOverlayTable
 
 
+class OverlayImageView(ConditionalLoginRequiredMixin, View):
+    """
+    An overlay's image file, for users who may view the overlay. Pages load
+    overlays from here instead of NetBox's media folder, because a file
+    opened from here can't run scripts: an SVG is sandboxed by
+    Content-Security-Policy, and nosniff stops the browser from treating
+    any file as something else.
+    """
+    def get(self, request, pk):
+        overlay = get_object_or_404(MapOverlay.objects.restrict(request.user, 'view'), pk=pk)
+        if not overlay.image:
+            raise Http404
+        try:
+            file = overlay.image.open('rb')
+        except OSError:
+            logger.warning('Overlay %s: image file %s is missing', overlay.pk, overlay.image.name)
+            raise Http404
+        name = os.path.basename(overlay.image.name)
+        content_type = mimetypes.guess_type(name)[0] or 'application/octet-stream'
+        response = FileResponse(file, content_type=content_type)
+        # The address changes with the file (see MapOverlay.image_url).
+        response['Cache-Control'] = 'private, max-age=31536000, immutable'
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        return response
+
+
 @register_model_view(MapMarker, 'list', path='', detail=False)
 class MapMarkerListView(generic.ObjectListView):
     queryset = MapMarker.objects.select_related('map', 'object_type').prefetch_related('object')
@@ -250,10 +283,8 @@ class MapShapeBulkDeleteView(generic.BulkDeleteView):
 # a marker through the REST API, to draw it with its status color and icon.
 #
 
-class MarkerDataView(View):
+class MarkerDataView(ConditionalLoginRequiredMixin, View):
     def get(self, request, pk):
-        if not request.user.is_authenticated:
-            return JsonResponse({'detail': 'Not logged in.'}, status=403)
         marker = get_object_or_404(MapMarker.objects.restrict(request.user, 'view'), pk=pk)
         data = viewer.marker_data(marker, request.user)
         if data is None:
@@ -265,10 +296,8 @@ class MarkerDataView(View):
 # The card shown when the mouse rests on a marker (see cards.py).
 #
 
-class MarkerCardView(View):
+class MarkerCardView(ConditionalLoginRequiredMixin, View):
     def get(self, request, pk):
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden()
         marker = get_object_or_404(MapMarker.objects.restrict(request.user, 'view'), pk=pk)
         # Same rule as the map itself: no card for an object the user can't see.
         if viewer.marker_data(marker, request.user) is None or marker.object is None:
@@ -277,12 +306,10 @@ class MarkerCardView(View):
                       cards.card_context(marker.object, marker.object_type, request.user))
 
 
-class ShapeCardView(View):
+class ShapeCardView(ConditionalLoginRequiredMixin, View):
     """The card of a line drawn as a cable's, cable bundle's or circuit's route."""
 
     def get(self, request, pk):
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden()
         shape = get_object_or_404(MapShape.objects.restrict(request.user, 'view'), pk=pk)
         if viewer.route_object(shape, request.user) is None:
             raise Http404

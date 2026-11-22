@@ -36,7 +36,12 @@ from .choices import BaseLayerChoices, ShapeKindChoices, ShapeLevelChoices
 MAP_SCOPE_TYPES = LOCATION_SCOPE_TYPES  # region, site group, site, location
 
 # What a line on a map can be the route of.
-ROUTE_TYPES = models.Q(app_label='dcim', model__in=('cable', 'cablebundle')) | models.Q(app_label='circuits', model='circuit')
+ROUTE_TYPES = (
+    models.Q(app_label='dcim', model__in=('cable', 'cablebundle')) | models.Q(app_label='circuits', model='circuit')
+)
+# The map's own parts can't be markers.
+MAP_PARTS = ('mapmarker', 'mapoverlay', 'mapshape')
+
 ROUTE_MODELS = (('dcim', 'cable'), ('dcim', 'cablebundle'), ('circuits', 'circuit'))
 
 
@@ -50,6 +55,13 @@ def number_pair(value):
 def overlay_upload_to(instance, filename):
     """Overlay images go to MEDIA_ROOT/netbox-map/, under the map's ID."""
     return f'netbox-map/{instance.map_id}/{os.path.basename(filename)}'
+
+
+def marker_types():
+    """Every NetBox object type a marker can point at: the public ones, minus the parts of a map."""
+    from core.models import ObjectType
+
+    return ObjectType.objects.public().exclude(app_label='netbox_map', model__in=MAP_PARTS)
 
 
 class Map(NetBoxModel):
@@ -183,6 +195,16 @@ class MapOverlay(ChangeLoggedModel):
     def is_placed(self):
         return None not in (self.x_min, self.y_min, self.x_max, self.y_max)
 
+    @property
+    def image_url(self):
+        """
+        Where pages load the image from: the plugin's own view, which adds
+        headers that stop an SVG from running scripts (see views.py). The
+        file name is part of the address, so a new file gets a new address.
+        """
+        url = reverse('plugins:netbox_map:mapoverlay_image', args=[self.pk])
+        return f'{url}?v={os.path.basename(self.image.name)}' if self.image else url
+
     def clean(self):
         super().clean()
         corners = (self.x_min, self.y_min, self.x_max, self.y_max)
@@ -263,6 +285,8 @@ class MapMarker(ChangeLoggedModel):
         if bool(self.object_type_id) != bool(self.object_id):
             raise ValidationError({'object': _('Choose both the type and the object, or neither.')})
         if self.object_type_id:
+            if not marker_types().filter(pk=self.object_type_id).exists():
+                raise ValidationError({'object': _('Objects of this type cannot be placed on a map.')})
             model = self.object_type.model_class()
             if model is None or not model.objects.filter(pk=self.object_id).exists():
                 raise ValidationError({'object': _('No such object.')})

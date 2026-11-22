@@ -1,10 +1,14 @@
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 
 from dcim.models import CableBundle
 
+from .. import signals
 from ..choices import ShapeKindChoices
 from ..forms import MapShapeForm
 from ..models import Map, MapMarker, MapOverlay, MapShape
@@ -93,10 +97,27 @@ class MarkerTests(TestCase):
 
     def test_deleted_object_leaves_every_map(self):
         device = make_device()
+        # The set of types on maps is cached before devices are on one.
+        signals.referenced_types()
         MapMarker.objects.create(map=make_map('First'), object=device)
         MapMarker.objects.create(map=make_map('Second'), object=device)
         device.delete()
         self.assertFalse(MapMarker.objects.exists())
+
+    def test_deleting_objects_no_map_points_at_costs_no_query(self):
+        site = make_site('Lonely')
+        cache.delete(signals.REFERENCED_TYPES_KEY)
+        signals.referenced_types()
+        # The site's own delete only; nothing from the plugin.
+        with CaptureQueriesContext(connection) as queries:
+            site.delete()
+        self.assertFalse(any('netbox_map' in query['sql'] for query in queries.captured_queries))
+
+    def test_only_public_types_can_be_markers(self):
+        map_ = make_map()
+        shape = MapShape.objects.create(map=map_, kind=ShapeKindChoices.CIRCLE, points=[[0, 0]], radius=1)
+        with self.assertRaises(ValidationError):
+            MapMarker(map=map_, object=shape).full_clean()
 
 
 class ShapeTests(TestCase):
@@ -174,7 +195,9 @@ class ShapeTests(TestCase):
             MapShape(map=map_, kind=ShapeKindChoices.JUNCTION, points=[[0, 0], [1, 1]]).full_clean()
         for via in ([{'point': 0, 'shape': 1}], [{'point': 1}], {'point': 1, 'shape': 1}):
             with self.subTest(via=via), self.assertRaises(ValidationError):
-                MapShape(map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [1, 1], [2, 2]], ends={'via': via}).full_clean()
+                MapShape(
+                    map=map_, kind=ShapeKindChoices.LINE, points=[[0, 0], [1, 1], [2, 2]], ends={'via': via},
+                ).full_clean()
 
     def test_form_shows_radius_only_for_circles(self):
         map_ = make_map()
@@ -207,6 +230,21 @@ class OverlayTests(TestCase):
         unsafe = b'<svg xmlns="http://www.w3.org/2000/svg"><rect onload="alert(1)"/></svg>'
         with self.assertRaises(ValidationError):
             MapOverlay(map=overlay.map, name='Bad', image=SimpleUploadedFile('bad.svg', unsafe)).full_clean()
+
+    def test_disguised_scripts_in_svg_refused(self):
+        bad = {
+            'utf-16': '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'.encode('utf-16'),
+            'char ref': b'<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/1999/xlink">'
+                        b'<a x:href="java&#x09;script&#58;alert(1)"><rect width="1" height="1"/></a></svg>',
+            'doctype': b'<!DOCTYPE svg [<!ENTITY e "x">]><svg xmlns="http://www.w3.org/2000/svg">&e;</svg>',
+            'style': b'<svg xmlns="http://www.w3.org/2000/svg"><style>a{b:url(java\nscript:x)}</style></svg>',
+            'html': b'<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><p/></foreignObject></svg>',
+            'not xml': b'<svg',
+        }
+        map_ = make_map()
+        for name, svg in bad.items():
+            with self.subTest(svg=name), self.assertRaises(ValidationError):
+                MapOverlay(map=map_, name='Bad', image=SimpleUploadedFile('bad.svg', svg)).full_clean()
 
     def test_other_files_refused(self):
         with self.assertRaises(ValidationError):

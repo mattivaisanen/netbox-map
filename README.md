@@ -42,9 +42,16 @@ shows on that object's page. Every object on a map gets a **Show on map**
 button, and a device that isn't on a map itself is found through its rack,
 location or site.
 
+## What it doesn't do
+
+- It never changes NetBox's own data. Objects are placed on a map by
+  reference, so a map shows what NetBox already knows.
+- It doesn't find positions by itself: you place objects on the map.
+
 ## Requirements
 
-- NetBox 4.7 or later. NetBox refuses to load the plugin on older versions.
+- NetBox 4.7. Tested on 4.7.0 and 4.7.5; NetBox refuses to load the plugin
+  on older versions.
 - No other plugins, and no Python packages beyond what NetBox installs.
 - For world maps, browsers need to reach map tile servers. The defaults
   are OpenStreetMap and Esri; servers in your own network can be set
@@ -84,6 +91,21 @@ cd /opt/netbox/netbox && python manage.py migrate
 
 Then restart NetBox. The [changelog](CHANGELOG.md) lists what each version
 needs.
+
+## With netbox-change-approval
+
+Maps are documentation, not network configuration, so they should not need
+approval. netbox-change-approval only asks for approval on maps themselves
+(markers, shapes and overlays are never held). Add the map type to its
+`exempt_models` setting so maps don't need approval either:
+
+```python
+PLUGINS_CONFIG = {
+    'netbox_change_approval': {
+        'exempt_models': ['netbox_map.map'],
+    },
+}
+```
 
 ## Uninstalling
 

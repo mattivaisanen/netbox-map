@@ -22,7 +22,7 @@
       {% else %}
       {% with overlay=map.overlays.all.0 %}
         {% if overlay %}
-          <img src="{{ overlay.image.url }}" alt="" loading="lazy">
+          <img src="{{ overlay.image_url }}" alt="" loading="lazy">
         {% else %}
           <i class="mdi {% if map.base_layer == 'image' %}mdi-image-outline{% else %}mdi-earth{% endif %}" aria-hidden="true"></i>
         {% endif %}

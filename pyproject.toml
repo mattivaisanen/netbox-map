@@ -31,3 +31,25 @@ include = ["netbox_map*"]
 # Templates and the map assets are not Python files, so they must be listed to end up in the wheel.
 [tool.setuptools.package-data]
 netbox_map = ["templates/**/*.html", "assets/*"]
+
+# Lint and import order: `ruff check .`
+[tool.ruff]
+line-length = 120
+extend-exclude = ["netbox_map/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Whole sentences, kept on one line so they match the scripts' text.
+"netbox_map/strings.py" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["netbox_map"]
+split-on-trailing-comma = false
+# NetBox's own packages, imported after Django like in NetBox itself.
+known-third-party = ["django", "rest_framework"]
+section-order = ["future", "standard-library", "third-party", "netbox", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+netbox = ["core", "dcim", "circuits", "extras", "ipam", "netbox", "tenancy", "users", "utilities", "virtualization", "wireless"]

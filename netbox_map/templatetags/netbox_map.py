@@ -18,3 +18,11 @@ def map_asset(name):
     """
     changed = int(os.path.getmtime(os.path.join(FOLDER, name)))
     return f"{reverse('plugins:netbox_map:asset', args=[name])}?v={NetBoxMapConfig.version}.{changed}"
+
+
+@register.simple_tag
+def map_strings():
+    """The map scripts' text in the active language (see strings.py)."""
+    from ..strings import strings
+
+    return strings()

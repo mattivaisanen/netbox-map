@@ -132,7 +132,7 @@ def _overlay(overlay):
     return {
         'id': overlay.pk,
         'name': overlay.name,
-        'url': overlay.image.url,
+        'url': overlay.image_url,
         'opacity': overlay.opacity,
         'weight': overlay.weight,
         'width': overlay.image_width,
@@ -243,7 +243,8 @@ def map_data(map_, request, highlight=None):
     # Objects come in one query per kind (prefetch), and so do the checks
     # of which of them the user may see.
     markers = list(
-        MapMarker.objects.restrict(user, 'view').filter(map=map_).select_related('object_type').prefetch_related('object')
+        MapMarker.objects.restrict(user, 'view').filter(map=map_)
+        .select_related('object_type').prefetch_related('object')
     )
     shapes = list(map_.shapes.restrict(user, 'view').select_related('link', 'object_type').prefetch_related('object'))
     visible = visible_objects(

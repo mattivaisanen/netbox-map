@@ -52,6 +52,10 @@ Overlay images are stored under `MEDIA_ROOT/netbox-map/<map id>/`, next to
 NetBox's own image attachments. Back them up with the rest of NetBox's media
 folder.
 
+Pages load overlays through the plugin (`/plugins/map/overlays/<id>/image/`),
+which checks the user's permission to view the overlay and adds headers that
+keep an SVG from running scripts.
+
 ## Upgrading
 
 ```bash

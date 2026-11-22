@@ -4,11 +4,16 @@ Checks and reads overlay images.
 Overlays are PNG, JPEG, GIF, WebP or SVG files. Raster images are read with
 Pillow (NetBox installs it). SVG files can carry scripts that would run in
 NetBox's own address if someone opened the file directly, so an SVG with a
-script, an event handler, a javascript: link or embedded HTML is refused.
+script, an event handler, a script link, embedded HTML or a DOCTYPE is
+refused. The file is parsed first, so the check sees the text after any
+encoding (UTF-16, ...) and character references (`&#58;`) are resolved.
+Overlays are also served with a sandboxing header (views.OverlayImageView),
+which stops scripts even if one gets past this check.
 """
 import os
 import re
 import xml.etree.ElementTree as ElementTree
+from xml.parsers import expat
 
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext as _
@@ -20,11 +25,13 @@ ALLOWED_EXTENSIONS = RASTER_EXTENSIONS + (SVG_EXTENSION,)
 # For the file picker, so it only offers images the plugin takes.
 ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,.svg'
 
-# Anything in an SVG that can run code or pull in HTML.
-UNSAFE_SVG = re.compile(
-    rb'<\s*script|<\s*foreignObject|<\s*iframe|<\s*embed|<\s*object|\son[a-z]+\s*=|javascript\s*:',
-    re.IGNORECASE,
-)
+# Elements that can run code or pull in HTML (compared without namespace).
+UNSAFE_ELEMENTS = {'script', 'foreignobject', 'iframe', 'embed', 'object', 'handler', 'listener'}
+
+# Link schemes that run code. Browsers ignore whitespace and control
+# characters inside the scheme, so those are removed before comparing.
+UNSAFE_SCHEME = re.compile(r'^(javascript|vbscript|data:text/html|data:application/xhtml)', re.IGNORECASE)
+IGNORED_IN_SCHEME = re.compile(r'[\x00-\x20]+')
 
 # Used when an SVG gives no usable size.
 DEFAULT_SVG_SIZE = (1000, 1000)
@@ -40,7 +47,7 @@ def validate_image(upload):
     if extension not in ALLOWED_EXTENSIONS:
         raise ValidationError(_('Use a PNG, JPEG, GIF, WebP or SVG image.'))
     if extension == SVG_EXTENSION:
-        if UNSAFE_SVG.search(_read(upload)):
+        if not is_safe_svg(_read(upload)):
             raise ValidationError(_('This SVG contains scripts or embedded HTML, which are not allowed.'))
     else:
         image_size(upload)  # Raises if Pillow can't read it
@@ -61,6 +68,46 @@ def image_size(upload):
     finally:
         upload.seek(0)
     return size
+
+
+def _local(name):
+    """A tag or attribute name without its {namespace}, in lower case."""
+    return name.rsplit('}', 1)[-1].lower()
+
+
+def _reject_doctype(data):
+    """
+    Raises ValueError if the file has a DOCTYPE. A DOCTYPE can declare
+    entities that hide markup from the checks below, and SVG needs none.
+    """
+    def refuse(*args):
+        raise ValueError('DOCTYPE')
+
+    parser = expat.ParserCreate()
+    parser.StartDoctypeDeclHandler = refuse
+    parser.EntityDeclHandler = refuse
+    parser.Parse(data, True)
+
+
+def is_safe_svg(data):
+    """False for an SVG that could run code when opened, or that can't be parsed."""
+    try:
+        _reject_doctype(data)
+        root = ElementTree.fromstring(data)
+    except (ValueError, expat.ExpatError, ElementTree.ParseError):
+        return False
+    for element in root.iter():
+        if not isinstance(element.tag, str) or _local(element.tag) in UNSAFE_ELEMENTS:
+            return False
+        for name, value in element.attrib.items():
+            if _local(name).startswith('on'):
+                return False
+            if UNSAFE_SCHEME.match(IGNORED_IN_SCHEME.sub('', value)):
+                return False
+        # Style sheets can hold links too: url(javascript:...).
+        if _local(element.tag) == 'style' and 'javascript' in IGNORED_IN_SCHEME.sub('', element.text or '').lower():
+            return False
+    return True
 
 
 def _read(upload):
