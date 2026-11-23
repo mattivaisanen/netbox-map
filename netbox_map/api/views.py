@@ -1,4 +1,4 @@
-"""REST API: /api/plugins/maps/."""
+"""REST API: /api/plugins/map/."""
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 
 from netbox.api.viewsets import NetBoxModelViewSet

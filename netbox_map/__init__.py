@@ -15,7 +15,7 @@ class NetBoxMapConfig(PluginConfig):
     )
     version = '0.1.0'
     author = 'Matti'
-    base_url = 'maps'
+    base_url = 'map'
     # The oldest NetBox release the tests run on.
     min_version = '4.7.0'
 
@@ -44,7 +44,8 @@ class NetBoxMapConfig(PluginConfig):
             {
                 'name': 'Regular',
                 'url': 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
+                               'contributors',
                 'max_zoom': 19,
             },
             {
@@ -80,7 +81,9 @@ class NetBoxMapConfig(PluginConfig):
     def ready(self):
         super().ready()
 
-        from . import signals  # noqa: F401 (connects receivers)
+        from . import signals
+
+        signals.connect()
 
 
 config = NetBoxMapConfig

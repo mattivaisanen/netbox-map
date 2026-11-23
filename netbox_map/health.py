@@ -9,6 +9,7 @@ its age from now. The age is then matched against the setting's levels to
 pick a color. Nothing is written anywhere and no other plugin is needed:
 whatever fills the field (a monitoring job, a script, a person) drives the dot.
 """
+import logging
 import math
 from datetime import date, datetime
 
@@ -18,6 +19,8 @@ from django.utils.dateparse import parse_date, parse_datetime
 from netbox.plugins import get_plugin_config
 
 PLUGIN = 'netbox_map'
+
+logger = logging.getLogger(__name__)
 
 # Seconds in each unit a numeric value can be given in.
 UNITS = {'seconds': 1, 'minutes': 60, 'hours': 3600, 'days': 86400}
@@ -55,6 +58,7 @@ def settings():
         try:
             limit, color = float(level[0]), _color(level[1])
         except (TypeError, ValueError, IndexError):
+            logger.warning('device_health: skipping level %r, expected [age, color]', level)
             continue
         if color:
             levels.append((limit, color))

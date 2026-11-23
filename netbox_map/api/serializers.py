@@ -6,7 +6,7 @@ from netbox.api.gfk_fields import GFKSerializerField
 from netbox.api.serializers import ChangeLogMessageSerializer, NetBoxModelSerializer, ValidatedModelSerializer
 
 from ..choices import BaseLayerChoices, ShapeKindChoices, ShapeLevelChoices
-from ..models import MAP_SCOPE_TYPES, ROUTE_TYPES, Map, MapMarker, MapOverlay, MapShape
+from ..models import MAP_SCOPE_TYPES, ROUTE_TYPES, Map, MapMarker, MapOverlay, MapShape, marker_types
 
 
 class MapSerializer(NetBoxModelSerializer):
@@ -23,7 +23,8 @@ class MapSerializer(NetBoxModelSerializer):
         model = Map
         fields = (
             'id', 'url', 'display_url', 'display', 'name', 'parent', 'base_layer', 'scope_type', 'scope_id', 'scope',
-            'default_x', 'default_y', 'default_zoom', 'rotation', 'layer_offsets', 'description', 'comments', 'tags', 'custom_fields', 'created',
+            'default_x', 'default_y', 'default_zoom', 'rotation', 'layer_offsets', 'description', 'comments', 'tags',
+            'custom_fields', 'created',
             'last_updated',
         )
         brief_fields = ('id', 'url', 'display', 'name', 'description')
@@ -47,7 +48,8 @@ class MapOverlaySerializer(ChangeLogMessageSerializer, ValidatedModelSerializer)
 class MapMarkerSerializer(ChangeLogMessageSerializer, ValidatedModelSerializer):
     """A NetBox object or a text label at a point on a map."""
     map = MapSerializer(nested=True)
-    object_type = ContentTypeField(queryset=ObjectType.objects.all(), required=False, allow_null=True, default=None)
+    # The same object types the marker form offers.
+    object_type = ContentTypeField(queryset=marker_types(), required=False, allow_null=True, default=None)
     object_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     object = GFKSerializerField(read_only=True)
 

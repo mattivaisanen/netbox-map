@@ -2,33 +2,29 @@ from django import forms
 from django.contrib.contenttypes.models import ContentType
 from django.utils.translation import gettext_lazy as _
 
-from core.models import ObjectType
 from dcim.forms.mixins import ScopedImportForm
-from netbox.forms import (
-    NetBoxModelBulkEditForm, NetBoxModelFilterSetForm, NetBoxModelForm, NetBoxModelImportForm,
-)
+from netbox.forms import NetBoxModelBulkEditForm, NetBoxModelFilterSetForm, NetBoxModelForm, NetBoxModelImportForm
 from utilities.forms import add_blank_choice
 from utilities.forms.fields import (
-    ColorField, CommentField, CSVChoiceField, CSVModelChoiceField, DynamicModelChoiceField,
-    DynamicModelMultipleChoiceField, GenericObjectChoiceField, TagFilterField,
+    ColorField,
+    CommentField,
+    CSVChoiceField,
+    CSVModelChoiceField,
+    DynamicModelChoiceField,
+    DynamicModelMultipleChoiceField,
+    GenericObjectChoiceField,
+    TagFilterField,
 )
 from utilities.forms.mixins import GenericObjectFormMixin
 from utilities.forms.rendering import FieldSet
 
 from . import images
 from .choices import BaseLayerChoices, ShapeKindChoices
-from .models import MAP_SCOPE_TYPES, ROUTE_TYPES, Map, MapMarker, MapOverlay, MapShape
+from .models import MAP_SCOPE_TYPES, ROUTE_TYPES, Map, MapMarker, MapOverlay, MapShape, marker_types
 
 
 def scope_types():
     return ContentType.objects.filter(app_label='dcim', model__in=MAP_SCOPE_TYPES)
-
-
-def marker_types():
-    """Every NetBox object type that can be pointed at, minus the parts of a map."""
-    return ObjectType.objects.public().exclude(
-        app_label='netbox_map', model__in=('mapmarker', 'mapoverlay', 'mapshape'),
-    )
 
 
 #
@@ -75,7 +71,9 @@ class MapImportForm(RotationMixin, ScopedImportForm, NetBoxModelImportForm):
 
     class Meta:
         model = Map
-        fields = ('name', 'parent', 'base_layer', 'rotation', 'scope_type', 'scope_id', 'description', 'comments', 'tags')
+        fields = (
+            'name', 'parent', 'base_layer', 'rotation', 'scope_type', 'scope_id', 'description', 'comments', 'tags',
+        )
 
 
 class MapBulkEditForm(NetBoxModelBulkEditForm):

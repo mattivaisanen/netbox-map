@@ -23,8 +23,20 @@ from django.db.models import Q
 
 from core.models import Job, ObjectChange
 from extras.models import (
-    Bookmark, CachedValue, CustomField, CustomLink, EventRule, ExportTemplate, ImageAttachment, JournalEntry,
-    Notification, SavedFilter, Subscription, TableConfig, Tag, TaggedItem,
+    Bookmark,
+    CachedValue,
+    CustomField,
+    CustomLink,
+    EventRule,
+    ExportTemplate,
+    ImageAttachment,
+    JournalEntry,
+    Notification,
+    SavedFilter,
+    Subscription,
+    TableConfig,
+    Tag,
+    TaggedItem,
 )
 from users.models import ObjectPermission
 

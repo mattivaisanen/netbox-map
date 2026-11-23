@@ -2,6 +2,8 @@
 {# Leaflet and the map script, served by the plugin (see assets.py). #}
 <link rel="stylesheet" href="{% map_asset 'leaflet.css' %}">
 <link rel="stylesheet" href="{% map_asset 'map.css' %}">
+{# The scripts' text in the user's language (strings.py); read before they run. #}
+{% map_strings as nbm_strings %}{{ nbm_strings|json_script:"nbm-strings" }}
 <script src="{% map_asset 'leaflet.js' %}"></script>
 <script src="{% map_asset 'export.js' %}"></script>
 <script src="{% map_asset 'map.js' %}"></script>

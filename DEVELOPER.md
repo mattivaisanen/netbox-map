@@ -10,7 +10,8 @@ How the plugin is put together, and why.
 - **No dependency on other plugins** and no Python packages beyond what
   NetBox installs. Images are read with Pillow, which NetBox already has.
   Leaflet 1.9.4 and MapLibre GL JS 5.24.0 are bundled in `assets/`;
-  nothing is loaded from a CDN.
+  nothing is loaded from a CDN. `assets/VENDORED.md` records their
+  versions and sources.
 - **NetBox's own tables are never changed.** Everything lives in the
   plugin's tables; NetBox objects are referred to by type and ID. Removing
   the plugin (after `prepare_map_uninstall`) leaves NetBox as it was.
@@ -22,13 +23,14 @@ How the plugin is put together, and why.
 |---|---|
 | `models.py` | `Map` (a NetBoxModel) and its change-logged parts `MapOverlay`, `MapMarker` and `MapShape`, with their validation. |
 | `images.py` | Overlay file checks: allowed types, unsafe SVG content, and reading the pixel size. |
+| `strings.py` | The text `map.js` and `export.js` show, translated by Django and passed to the page. |
 | `viewer.py` | Builds the JSON a map page hands to `map.js`: overlays, markers (with status color and icon), shapes, the user's rights and the API addresses. |
 | `cards.py` | The card shown when the mouse rests on a marker or cable route: which fields, and how each value is shown. |
 | `assets.py`, `assets/` | Leaflet, MapLibre GL, `map.js`, `export.js` and `map.css`, served by the plugin itself. |
 | `assets/map.js` | Draws a map and runs the editor. |
 | `assets/export.js` | Saves a map as PNG, SVG or PDF (the download button). |
 | `template_content.py` | **Show on map**, assigned maps on region/site/location pages, the rack's maps on rack pages. |
-| `templatetags/netbox_map.py` | `{% map_asset %}`: an asset's address with the plugin version. |
+| `templatetags/netbox_map.py` | `{% map_asset %}`: an asset's address with the plugin version; `{% map_strings %}`: the scripts' text. |
 | `signals.py` | Removes markers of deleted objects, clears the assignment of maps whose region/site/location was deleted, deletes overlay files. |
 | `views.py`, `forms.py`, `filtersets.py`, `tables.py`, `urls.py`, `navigation.py`, `search.py`, `api/` | Standard NetBox UI and REST API. |
 | `management/commands/prepare_map_uninstall.py` | Removes NetBox rows about maps that would break NetBox pages once the plugin is gone. |
@@ -59,9 +61,17 @@ How the plugin is put together, and why.
 
 A marker points at any public NetBox object type through a generic
 relation, so the database does not remove it when the object goes.
-`signals.object_deleted` listens to every `post_delete`, skips NetBox's
-bookkeeping apps and the map's own parts, and deletes the object's markers
-one by one so each deletion is change-logged. A map assigned to a deleted
+`signals.object_deleted` listens to every `post_delete` (any public type can
+be a marker, so there is no single sender), skips NetBox's bookkeeping apps
+and the map's own parts, and deletes the object's markers one by one so each
+deletion is change-logged.
+
+To keep that cheap, the set of object types that are on any map (markers,
+routes, map assignments) is kept in NetBox's cache. A delete of any other
+type costs no query. Saving a marker, shape or map with a type not in the
+set drops it; it also expires after five minutes, for rows written past
+Django's signals. Receivers are connected in `signals.connect()`, called
+from `ready()`, each with a `netbox_map:` `dispatch_uid`. A map assigned to a deleted
 region, site group, site or location keeps existing with no assignment.
 
 `Map` itself can be a marker's object (a link to another map). The
@@ -73,9 +83,20 @@ text labels have no object and are not limited.
 Stored with a plain `FileField` under `MEDIA_ROOT/netbox-map/<map id>/`.
 NetBox's `ImageField` uses Pillow to validate, and Pillow can't open SVG,
 so `images.validate_image()` checks raster files with Pillow and SVG files
-with a pattern that refuses scripts, event handlers, `javascript:` links
-and embedded HTML. NetBox serves media from its own address, so a script
-in an SVG opened directly would run as the logged-in user.
+with `images.is_safe_svg()`. That parses the file first, so other encodings
+(UTF-16) and character references (`&#58;`) can't hide anything, then
+refuses scripts, event handlers, script links, embedded HTML and any
+DOCTYPE (entities could hide markup). No `defusedxml`: NetBox doesn't
+ship it, and refusing DOCTYPEs removes the entity attacks it guards
+against.
+
+The check is the first line. The second: pages never link the media file.
+`MapOverlay.image_url` points at `OverlayImageView`, which checks `view`
+permission and serves the file with `Content-Security-Policy: sandbox` and
+`X-Content-Type-Options: nosniff`, like netbox-theme's logos. A script that
+got past the check still can't run there. The file name is in the address
+(`?v=`), so the response is cached for good and a new file gets a new
+address.
 
 The pixel size is read on save when a new file comes in. Old files are
 deleted after the transaction commits, when an overlay is deleted or its
@@ -375,4 +396,15 @@ cd /opt/netbox/netbox
 python manage.py test netbox_map
 ```
 
-CI runs them on the oldest supported NetBox release.
+CI runs them on the oldest supported NetBox release and the latest tested
+one, only for pull requests that change code. Lint with `ruff check .`
+(settings in `pyproject.toml`).
+
+## Translations
+
+Python and templates use Django's `gettext` as usual. The scripts can't, so
+`strings.py` lists every text they show (`gettext_noop`), and
+`inc/map_assets.html` puts the translations into the page as JSON
+(`nbm-strings`). `t('English text', {name: value})` in the scripts looks
+them up, falling back to English. A test checks that every `t('...')` in
+the scripts is listed in `strings.py`.

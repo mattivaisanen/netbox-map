@@ -37,7 +37,7 @@ New:
   and `max_zoom`. Tile requests carry NetBox's address as the referrer, as
   OpenStreetMap's tile servers require.
 - Pages to list, add, change and delete all of these, and a REST API under
-  `/api/plugins/maps/`.
+  `/api/plugins/map/`.
 - Place search in the editor of world maps: a city, an address or a
   latitude and longitude, with a list to pick from when several places
   match. Set `geocoder_url` to use another search server.
@@ -114,3 +114,24 @@ New:
 - When an object is deleted from NetBox, its markers leave every map.
 - `prepare_map_uninstall` removes NetBox's rows about maps before the plugin
   is uninstalled.
+- The map's menus, hints and buttons can be translated like the rest of
+  NetBox.
+- Hover cards work for anonymous viewers when NetBox doesn't require a
+  login.
+
+Fixed:
+
+- An SVG overlay could hide a script from the upload check (another text
+  encoding, or encoded characters in a link) and run it when its file was
+  opened. The check now reads the parsed file, and overlays are served
+  through the plugin with headers that stop scripts from running at all.
+- The REST API took any object type for a marker; it now takes the same
+  types as the marker form.
+- Deleting objects that are on no map no longer costs database queries.
+
+Upgrading from a development version:
+
+- The plugin's address is now `/plugins/map/` (and `/api/plugins/map/`),
+  was `/plugins/maps/`. Update bookmarks and API scripts.
+- The development migrations are squashed into one. `migrate` records it
+  as applied on a database that has them all.

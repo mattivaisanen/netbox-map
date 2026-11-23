@@ -13,6 +13,19 @@
 (function () {
   'use strict';
 
+  // Text shown to users. Django translates it (strings.py) and the page
+  // passes it in the "nbm-strings" element; English is used for anything
+  // missing. {name} in a text is replaced from `values`.
+  var STRINGS = (function () {
+    var element = document.getElementById('nbm-strings');
+    try { return element ? JSON.parse(element.textContent) : {}; } catch (error) { return {}; }
+  }());
+  function t(text, values) {
+    var out = STRINGS[text] || text;
+    Object.keys(values || {}).forEach(function (key) { out = out.split('{' + key + '}').join(values[key]); });
+    return out;
+  }
+
   // How far a world map zooms in, beyond the tile server's own levels.
   var MAX_ZOOM = 22;
 
@@ -52,7 +65,7 @@
   }
 
   function failed(error) {
-    window.alert('Saving failed: ' + error.message);
+    window.alert(t('Saving failed: {error}', { error: error.message }));
   }
 
   // A round pin with an icon: the marker's own color, else the default
@@ -91,8 +104,8 @@
     var html = '<strong>' + escapeHtml(marker.label) + '</strong>';
     if (marker.type) { html += '<br><span class="text-secondary">' + escapeHtml(marker.type) + '</span>'; }
     var links = [];
-    if (marker.url) { links.push('<a href="' + marker.url + '">' + (marker.map_link ? 'Open map' : 'Open') + '</a>'); }
-    if (edit) { links.push('<a href="' + marker.edit_url + '">Edit</a>'); }
+    if (marker.url) { links.push('<a href="' + marker.url + '">' + (marker.map_link ? t('Open map') : t('Open')) + '</a>'); }
+    if (edit) { links.push('<a href="' + marker.edit_url + '">' + t('Edit') + '</a>'); }
     if (links.length) { html += '<br>' + links.join(' · '); }
     return html;
   }
@@ -317,7 +330,7 @@
   // Not while a drawing tool is in use.
   function draggableLabel(state, element, handlers) {
     L.DomUtil.addClass(element, 'nbm-label-move');
-    element.title = 'Drag to move the label';
+    element.title = t('Drag to move the label');
     var moved = false;
     L.DomEvent.on(element, 'mousedown', function (event) {
       if (state.tool || event.button !== 0) { return; }
@@ -357,7 +370,7 @@
         var bar = L.DomUtil.create('div', 'leaflet-bar');
         var button = L.DomUtil.create('a', 'nbm-fit', bar);
         button.href = '#';
-        var title = hasStartView ? 'Back to the start view' : 'Show the whole map';
+        var title = hasStartView ? t('Back to the start view') : t('Show the whole map');
         button.title = title;
         button.setAttribute('role', 'button');
         button.setAttribute('aria-label', title);
@@ -706,7 +719,7 @@
       options: { position: 'topright' },
       onAdd: function () {
         var bar = L.DomUtil.create('div', 'leaflet-bar nbm-north');
-        bar.title = 'North';
+        bar.title = t('North');
         bar.innerHTML = '<i class="mdi mdi-arrow-up-bold" style="transform: rotate(' + degrees + 'deg)"></i>';
         return bar;
       },
@@ -1152,16 +1165,22 @@
       var dot = style.className
         ? '<span class="nbm-dot text-bg-' + escapeHtml(s.status) + '"></span>'
         : '<span class="nbm-dot" style="background:' + escapeHtml(style.color) + '"></span>';
-      var name = escapeHtml(s.route_name || s.label || 'Line');
+      var name = escapeHtml(s.route_name || s.label || t('Line'));
       var link = s.route_url ? '<a href="' + s.route_url + '" class="text-truncate">' + name + '</a>' : '<span class="text-truncate">' + name + '</span>';
       var kind = s.route_type ? '<span class="text-secondary small ms-auto text-nowrap">' + escapeHtml(s.route_type) + '</span>' : '';
       return '<div class="list-group-item d-flex align-items-center gap-2 px-3 py-1">' + dot + link + kind + '</div>';
     });
-    if (!rows.length) { rows.push('<div class="list-group-item text-secondary px-3 py-1">No cables yet</div>'); }
+    if (!rows.length) { rows.push('<div class="list-group-item text-secondary px-3 py-1">' + t('No cables yet') + '</div>'); }
     return header + '<div class="list-group list-group-flush nbm-card-list">' + rows.join('') + '</div></div>';
   }
 
-  function plural(count, one, many) { return count + ' ' + (count === 1 ? one : many); }
+  // Said when a line or area would have fewer points than it needs.
+  function tooFewPoints(kind) {
+    return kind === 'area' ? t('An area needs at least 3 points.') : t('A line needs at least 2 points.');
+  }
+
+  // `one` and `many` are texts with {count} in them.
+  function plural(count, one, many) { return t(count === 1 ? one : many, { count: count }); }
 
   // What the card shows for the part of a line under the mouse: a bundle's
   // list when other lines run alongside, else the line's own card.
@@ -1170,7 +1189,10 @@
     var members = span && span.group ? state.groups[span.group] : null;
     if (members && members.length > 1) {
       var ends = span.group.split('|');
-      var title = plural(members.length, 'cable', 'cables') + ' between ' + anchorName(state, ends[0]) + ' and ' + anchorName(state, ends[1]);
+      var title = t('{cables} between {start} and {end}', {
+        cables: plural(members.length, '{count} cable', '{count} cables'),
+        start: anchorName(state, ends[0]), end: anchorName(state, ends[1]),
+      });
       return {
         key: 'group:' + span.group,
         html: listCard(title, members.map(function (m) { return m.entry; })),
@@ -1191,7 +1213,7 @@
       lines.push(line);
       line.spans.forEach(function (span) { spans.push({ entry: line, span: span }); });
     });
-    var title = (entry.data.label || 'Junction') + ': ' + plural(lines.length, 'cable', 'cables');
+    var title = (entry.data.label || t('Junction')) + ': ' + plural(lines.length, '{count} cable', '{count} cables');
     return { key: 'junction:' + entry.data.id, html: listCard(title, lines), highlight: spans };
   }
 
@@ -1427,7 +1449,7 @@
       onAdd: function () {
         var form = L.DomUtil.create('form', 'nbm-search');
         form.innerHTML = '<input type="search" class="form-control form-control-sm" ' +
-          'placeholder="' + (geocoderUrl ? 'Place, address or lat, lon' : 'lat, lon') + '" aria-label="Go to">';
+          'placeholder="' + escapeHtml(geocoderUrl ? t('Place, address or lat, lon') : t('lat, lon')) + '" aria-label="' + escapeHtml(t('Go to')) + '">';
         var input = form.querySelector('input');
         var list = L.DomUtil.create('div', 'list-group shadow-sm mt-1', form);
         // Zooms to a geocoder result: its outline when it has one, else its point.
@@ -1798,11 +1820,11 @@
         var html = '<strong>' + escapeHtml(shape.label || shape.route_name || shape.kind) + '</strong><br>';
         var links = [];
         if (data.can.change_shape) {
-          var reshape = { circle: 'Move or resize', junction: 'Move' }[shape.kind] || 'Edit points';
+          var reshape = { circle: t('Move or resize'), junction: t('Move') }[shape.kind] || t('Edit points');
           links.push('<a href="#" data-nbm-reshape="' + shape.id + '">' + reshape + '</a>');
-          links.push('<a href="' + shape.edit_url + '">' + (shape.kind === 'line' ? 'Label, color, route' : 'Label, color, link') + '</a>');
+          links.push('<a href="' + shape.edit_url + '">' + (shape.kind === 'line' ? t('Label, color, route') : t('Label, color, link')) + '</a>');
         }
-        if (data.can.delete_shape) { links.push('<a href="#" data-nbm-delete-shape="' + shape.id + '">Delete</a>'); }
+        if (data.can.delete_shape) { links.push('<a href="#" data-nbm-delete-shape="' + shape.id + '">' + t('Delete') + '</a>'); }
         layer.bindPopup(html + links.join(' · '));
       } else if (shape.link_url) {
         // A shape linked to another map opens it, like a map marker.
@@ -1875,17 +1897,17 @@
 
   // What sort of thing each part of the map is, for the filters.
   var CATEGORIES = [
-    { key: 'device', text: 'Devices', icon: 'server' },
-    { key: 'rack', text: 'Racks', icon: 'server-network' },
-    { key: 'map', text: 'Map links', icon: 'map-marker-path' },
-    { key: 'other', text: 'Other objects', icon: 'map-marker' },
-    { key: 'label', text: 'Labels', icon: 'label-outline' },
-    { key: 'cable', text: 'Cables', icon: 'cable-data' },
-    { key: 'area', text: 'Areas', icon: 'vector-polygon' },
-    { key: 'line', text: 'Lines', icon: 'vector-polyline' },
-    { key: 'circle', text: 'Circles', icon: 'vector-circle' },
-    { key: 'junction', text: 'Junctions', icon: 'circle-double' },
-    { key: 'image', text: 'Images', icon: 'image-outline' },
+    { key: 'device', text: t('Devices'), icon: 'server' },
+    { key: 'rack', text: t('Racks'), icon: 'server-network' },
+    { key: 'map', text: t('Map links'), icon: 'map-marker-path' },
+    { key: 'other', text: t('Other objects'), icon: 'map-marker' },
+    { key: 'label', text: t('Labels'), icon: 'label-outline' },
+    { key: 'cable', text: t('Cables'), icon: 'cable-data' },
+    { key: 'area', text: t('Areas'), icon: 'vector-polygon' },
+    { key: 'line', text: t('Lines'), icon: 'vector-polyline' },
+    { key: 'circle', text: t('Circles'), icon: 'vector-circle' },
+    { key: 'junction', text: t('Junctions'), icon: 'circle-double' },
+    { key: 'image', text: t('Images'), icon: 'image-outline' },
   ];
 
   function markerCategory(marker) {
@@ -1931,12 +1953,12 @@
       name.textContent = item.text;
       name.href = item.onClick ? '#' : item.url;
       if (item.onClick) {
-        name.title = 'Show on the map';
+        name.title = t('Show on the map');
         L.DomEvent.on(name, 'click', function (event) { L.DomEvent.preventDefault(event); item.onClick(); });
         if (item.url) {
           var open = L.DomUtil.create('a', 'text-secondary', row);
           open.href = item.url;
-          open.title = 'Open';
+          open.title = t('Open');
           open.innerHTML = '<i class="mdi mdi-open-in-new"></i>';
         }
       }
@@ -1952,7 +1974,7 @@
     L.DomEvent.disableScrollPropagation(aside);
 
     // Where the map is: parent maps, then its region, site or location.
-    var where = sidebarSection(aside, 'Location');
+    var where = sidebarSection(aside, t('Location'));
     if (data.place.length) {
       var crumbs = L.DomUtil.create('div', 'nbm-crumbs', where);
       data.place.forEach(function (step) {
@@ -1963,13 +1985,13 @@
       });
       L.DomUtil.create('span', 'fw-bold', crumbs).textContent = data.name;
     } else {
-      L.DomUtil.create('div', 'text-secondary small', where).textContent = 'Not assigned to a place.';
+      L.DomUtil.create('div', 'text-secondary small', where).textContent = t('Not assigned to a place.');
     }
 
     // Background layer of a world map.
     var layerNames = Object.keys(state.baseLayers);
     if (layerNames.length > 1) {
-      var background = sidebarSection(aside, 'Background');
+      var background = sidebarSection(aside, t('Background'));
       state.backgroundSection = background;
       var group = L.DomUtil.create('div', 'btn-group btn-group-sm w-100 flex-wrap', background);
       layerNames.forEach(function (name) {
@@ -1998,7 +2020,7 @@
     }
     var present = CATEGORIES.filter(function (c) { return parts.some(function (p) { return p.category === c.key; }); });
     if (present.length) {
-      var show = sidebarSection(aside, 'Show');
+      var show = sidebarSection(aside, t('Show'));
       present.forEach(function (category) {
         var count = parts.filter(function (p) { return p.category === category.key; }).length;
         var row = L.DomUtil.create('label', 'form-check form-switch mb-1', show);
@@ -2037,13 +2059,13 @@
     data.submaps.forEach(function (submap) { addMap(submap.name, submap.url); });
     data.markers.forEach(function (marker) { if (marker.map_link) { addMap(marker.label, marker.url); } });
     data.shapes.forEach(function (shape) { if (shape.link_url) { addMap(shape.link_name, shape.link_url); } });
-    if (maps.length) { sidebarList(sidebarSection(aside, 'Maps'), maps); }
+    if (maps.length) { sidebarList(sidebarSection(aside, t('Maps')), maps); }
 
     // Devices, racks and cables on the map: click to zoom in, icon to open.
     [
-      { key: 'rack', title: 'Racks' },
-      { key: 'device', title: 'Devices' },
-      { key: 'cable', title: 'Cables and circuits' },
+      { key: 'rack', title: t('Racks') },
+      { key: 'device', title: t('Devices') },
+      { key: 'cable', title: t('Cables and circuits') },
     ].forEach(function (group) {
       var members = parts.filter(function (p) { return p.category === group.key; });
       if (!members.length) { return; }
@@ -2052,7 +2074,7 @@
       if (members.length > 8) {
         filter = L.DomUtil.create('input', 'form-control form-control-sm mb-1', section);
         filter.type = 'search';
-        filter.placeholder = 'Filter';
+        filter.placeholder = t('Filter');
       }
       var list = sidebarList(section, members.map(function (part) {
         var item = part.marker || part.shape;
@@ -2087,7 +2109,7 @@
         var bar = L.DomUtil.create('div', 'leaflet-bar');
         var button = L.DomUtil.create('a', 'nbm-fit', bar);
         button.href = '#';
-        button.title = 'Show or hide the side panel';
+        button.title = t('Show or hide the side panel');
         button.setAttribute('role', 'button');
         button.innerHTML = '<i class="mdi mdi-dock-right"></i>';
         L.DomEvent.disableClickPropagation(button);
@@ -2127,7 +2149,7 @@
       if (!link) { return; }
       link.addEventListener('click', function (click) {
         click.preventDefault();
-        if (!window.confirm('Delete this shape?')) { return; }
+        if (!window.confirm(t('Delete this shape?'))) { return; }
         api('DELETE', data.api.shapes + link.getAttribute('data-nbm-delete-shape') + '/').then(reload, failed);
       });
     });
@@ -2180,14 +2202,14 @@
       setView.addEventListener('click', function () {
         var center = fromLatLng(map.getCenter());
         api('PATCH', data.api.map, { default_x: center.x, default_y: center.y, default_zoom: map.getZoom() })
-          .then(function () { say('The map now opens at this view.'); }, failed);
+          .then(function () { say(t('The map now opens at this view.')); }, failed);
       });
     }
     var clearView = toolbar.querySelector('[data-nbm-clear-view]');
     if (clearView) {
       clearView.addEventListener('click', function () {
         api('PATCH', data.api.map, { default_x: null, default_y: null, default_zoom: null })
-          .then(function () { say('The map now opens fitted to everything on it.'); }, failed);
+          .then(function () { say(t('The map now opens fitted to everything on it.')); }, failed);
       });
     }
 
@@ -2247,7 +2269,7 @@
       map.getContainer().style.cursor = 'crosshair';
       // Clicks go to the map, not to shapes already on it (see map.css).
       L.DomUtil.addClass(map.getContainer(), 'nbm-tool-on');
-      say(text + ' Press Esc to cancel.');
+      say(text + ' ' + t('Press Esc to cancel.'));
     }
 
     // Lining up background layers: while "Line up" is on, dragging the map
@@ -2257,11 +2279,11 @@
       var row = L.DomUtil.create('div', 'd-flex align-items-center flex-wrap gap-2 mt-2', state.backgroundSection);
       var lineUp = L.DomUtil.create('button', 'btn btn-sm btn-outline-secondary', row);
       lineUp.type = 'button';
-      lineUp.innerHTML = '<i class="mdi mdi-arrow-all"></i> Line up';
-      lineUp.title = 'Drag the map to move this background into line with the others';
+      lineUp.innerHTML = '<i class="mdi mdi-arrow-all"></i> ' + t('Line up');
+      lineUp.title = t('Drag the map to move this background into line with the others');
       var resetOffset = L.DomUtil.create('button', 'btn btn-sm btn-ghost-secondary', row);
       resetOffset.type = 'button';
-      resetOffset.textContent = 'Reset';
+      resetOffset.textContent = t('Reset');
       var readout = L.DomUtil.create('span', 'small text-secondary', row);
       data.layer_offsets = data.layer_offsets || {};
       var offsetOf = function () { return data.layer_offsets[state.baseLayerName] || [0, 0]; };
@@ -2269,8 +2291,8 @@
         var o = offsetOf();
         var moved = o[0] || o[1];
         readout.textContent = moved
-          ? Math.abs(o[0]).toFixed(1) + ' m ' + (o[0] < 0 ? 'west' : 'east') + ', ' +
-            Math.abs(o[1]).toFixed(1) + ' m ' + (o[1] < 0 ? 'south' : 'north')
+          ? t(o[0] < 0 ? '{meters} m west' : '{meters} m east', { meters: Math.abs(o[0]).toFixed(1) }) + ', ' +
+            t(o[1] < 0 ? '{meters} m south' : '{meters} m north', { meters: Math.abs(o[1]).toFixed(1) })
           : '';
         resetOffset.classList.toggle('d-none', !moved);
       };
@@ -2282,7 +2304,7 @@
         startTool({ align: true, stop: function () {
           map.dragging.enable();
           lineUp.classList.remove('active');
-        } }, 'Drag the map to move the "' + state.baseLayerName + '" background. Click Line up again when done.');
+        } }, t('Drag the map to move the "{name}" background. Click Line up again when done.', { name: state.baseLayerName }));
         map.dragging.disable();
         map.getContainer().style.cursor = 'move';
         lineUp.classList.add('active');
@@ -2322,14 +2344,14 @@
 
     toolbar.querySelectorAll('[data-nbm-place-marker]').forEach(function (button) {
       button.addEventListener('click', function () {
-        startTool({ place: button.getAttribute('data-nbm-place-marker') }, 'Click where "' + button.getAttribute('data-nbm-name') + '" goes.');
+        startTool({ place: button.getAttribute('data-nbm-place-marker') }, t('Click where "{name}" goes.', { name: button.getAttribute('data-nbm-name') }));
       });
     });
 
     var addMarker = toolbar.querySelector('[data-nbm-add-marker]');
     if (addMarker) {
       addMarker.addEventListener('click', function () {
-        startTool({ add: true }, 'Click where the new marker goes.');
+        startTool({ add: true }, t('Click where the new marker goes.'));
       });
     }
 
@@ -2337,9 +2359,9 @@
       button.addEventListener('click', function () {
         var kind = button.getAttribute('data-nbm-draw');
         startTool({ draw: kind }, {
-          circle: 'Click the center, then a point on the edge.',
-          junction: 'Click where the junction (a manhole, cable well, pole, ...) goes.',
-        }[kind] || 'Click the points, then Finish (or double-click the last point). Clicks on markers and junctions attach the line to them.');
+          circle: t('Click the center, then a point on the edge.'),
+          junction: t('Click where the junction (a manhole, cable well, pole, ...) goes.'),
+        }[kind] || t('Click the points, then Finish (or double-click the last point). Clicks on markers and junctions attach the line to them.'));
         drawing = { kind: kind, points: [], anchors: [], preview: null, cursor: null };
         map.doubleClickZoom.disable();
         if (kind !== 'circle' && kind !== 'junction') {
@@ -2348,8 +2370,16 @@
       });
     });
 
+    // Asked when a new shape is saved, by kind.
+    var LABEL_PROMPTS = {
+      area: t('Label for the area (optional):'),
+      line: t('Label for the line (optional):'),
+      circle: t('Label for the circle (optional):'),
+      junction: t('Label for the junction (optional):'),
+    };
+
     function saveShape(kind, points, radius, ends, smooth) {
-      var label = window.prompt('Label for the ' + kind + ' (optional):', '');
+      var label = window.prompt(LABEL_PROMPTS[kind] || t('Label (optional):'), '');
       if (label === null) { stopTool(); return; }
       api('POST', data.api.shapes, {
         map: data.id, kind: kind, label: label, points: points, radius: radius, ends: ends || {}, smooth: smooth || [],
@@ -2374,7 +2404,7 @@
       drawing.anchors = drawing.anchors.filter(function (a, i) { return keep[i]; });
       var least = drawing.kind === 'area' ? 3 : 2;
       if (drawing.points.length < least) {
-        say('A ' + drawing.kind + ' needs at least ' + least + ' points.');
+        say(tooFewPoints(drawing.kind));
         return;
       }
       var points = drawing.points.map(function (p) { return [p.lng, p.lat]; });
@@ -2388,7 +2418,7 @@
       if (drawing.kind === 'cable') {
         // A cable route is a line tied to a cable, bundle or circuit.
         state.tool = null;
-        say('Pick what this route is for.');
+        say(t('Pick what this route is for.'));
         pickRoute(state, drawing.points[drawing.points.length - 1], function (type, id) {
           api('POST', data.api.shapes, {
             map: data.id, kind: 'line', points: points, object_type: type, object_id: id, ends: line.ends, smooth: line.smooth,
@@ -2528,12 +2558,12 @@
     state.reshaping = stop;
     map.on('click', stop);
     say({
-      circle: 'Drag the middle to move the circle, the edge handle to resize it. Click the map when done.',
-      junction: 'Drag the junction to move it; lines through it follow. Click the map when done.',
-      line: 'Drag points to move them (an end onto another marker or junction to connect it there), a small midpoint ' +
+      circle: t('Drag the middle to move the circle, the edge handle to resize it. Click the map when done.'),
+      junction: t('Drag the junction to move it; lines through it follow. Click the map when done.'),
+      line: t('Drag points to move them (an end onto another marker or junction to connect it there), a small midpoint ' +
         'to add a sharp turn, hold Ctrl while dragging to curve the whole line, right-click a point to remove it. ' +
-        'Click the map when done.',
-    }[kind] || 'Drag points to move them, a small midpoint to add one, right-click a point to remove it. Click the map when done.');
+        'Click the map when done.'),
+    }[kind] || t('Drag points to move them, a small midpoint to add one, right-click a point to remove it. Click the map when done.'));
 
     function handle(latlng, small) {
       // Above markers, so a line's end on a device can still be picked up.
@@ -2641,7 +2671,7 @@
         h.on('contextmenu', function (event) {
           L.DomEvent.stop(event);
           var now = latlngs().slice();
-          if (now.length <= least) { say('A ' + kind + ' needs at least ' + least + ' points.'); return; }
+          if (now.length <= least) { say(tooFewPoints(kind)); return; }
           now.splice(i, 1);
           if (ends) {
             shiftAnchors(ends, i, -1, now.length);
@@ -2691,7 +2721,7 @@
   // listing matches. Objects for which taken('app.model:id') is true are
   // shown but can't be picked; pick(object, type) gets the chosen one.
   function searchList(box, source, what, taken, pick) {
-    box.innerHTML = '<input type="search" class="form-control form-control-sm" placeholder="Search ' + escapeHtml(what) + '">' +
+    box.innerHTML = '<input type="search" class="form-control form-control-sm" placeholder="' + escapeHtml(what) + '">' +
       '<div class="nbm-results list-group list-group-flush mt-1"></div>';
     var input = box.querySelector('input');
     var results = box.querySelector('.nbm-results');
@@ -2707,11 +2737,11 @@
           item.type = 'button';
           item.className = 'list-group-item list-group-item-action py-1 px-2';
           item.disabled = placed;
-          item.textContent = obj.display + (placed ? ' (on this map)' : '');
+          item.textContent = placed ? t('{name} (on this map)', { name: obj.display }) : obj.display;
           item.addEventListener('click', function () { pick(obj, source.type); });
           results.appendChild(item);
         });
-        if (!json.results.length) { results.innerHTML = '<div class="text-secondary small p-1">Nothing found</div>'; }
+        if (!json.results.length) { results.innerHTML = '<div class="text-secondary small p-1">' + t('Nothing found') + '</div>'; }
       }).catch(failed);
     }
     input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(load, 250); });
@@ -2725,7 +2755,7 @@
     var button = document.createElement('button');
     button.type = 'button';
     button.className = 'btn btn-sm btn-ghost-secondary w-100 text-start mb-1';
-    button.innerHTML = '<i class="mdi mdi-arrow-left"></i> Back';
+    button.innerHTML = '<i class="mdi mdi-arrow-left"></i> ' + t('Back');
     button.addEventListener('click', function (click) { L.DomEvent.stop(click); back(); });
     box.insertBefore(button, box.firstChild);
   }
@@ -2743,9 +2773,9 @@
 
   // What a drawn cable route can be tied to.
   var ROUTE_KINDS = [
-    { kind: 'cable', text: 'Cable', icon: 'cable-data' },
-    { kind: 'cablebundle', text: 'Cable bundle', icon: 'cable-data' },
-    { kind: 'circuit', text: 'Circuit', icon: 'transit-connection-variant' },
+    { kind: 'cable', text: t('Cable'), search: t('Search cables'), icon: 'cable-data' },
+    { kind: 'cablebundle', text: t('Cable bundle'), search: t('Search cable bundles'), icon: 'cable-data' },
+    { kind: 'circuit', text: t('Circuit'), search: t('Search circuits'), icon: 'transit-connection-variant' },
   ];
 
   // Asks which cable, bundle or circuit a drawn route belongs to. Calls
@@ -2768,7 +2798,7 @@
     function choices() {
       menu.innerHTML = '';
       var title = L.DomUtil.create('div', 'small text-secondary px-2 pt-1', menu);
-      title.textContent = 'This route is for:';
+      title.textContent = t('This route is for:');
       ROUTE_KINDS.forEach(function (entry) {
         if (!data.search[entry.kind]) { return; }
         var item = L.DomUtil.create('button', 'btn btn-sm btn-ghost-secondary w-100 text-start', menu);
@@ -2776,7 +2806,7 @@
         item.innerHTML = '<i class="mdi mdi-' + entry.icon + '"></i> ' + entry.text;
         item.addEventListener('click', function (click) {
           L.DomEvent.stop(click);
-          searchList(menu, data.search[entry.kind], entry.text.toLowerCase() + 's',
+          searchList(menu, data.search[entry.kind], entry.search,
             function (key) { return data.shapes.some(function (s) { return s.object === key; }); },
             function (obj, type) { close(true); pick(type, obj.id); });
           backButton(menu, choices);
@@ -2784,17 +2814,17 @@
       });
       var cancelButton = L.DomUtil.create('button', 'btn btn-sm btn-ghost-danger w-100 text-start', menu);
       cancelButton.type = 'button';
-      cancelButton.innerHTML = '<i class="mdi mdi-close"></i> Cancel';
+      cancelButton.innerHTML = '<i class="mdi mdi-close"></i> ' + t('Cancel');
       cancelButton.addEventListener('click', function () { close(false); });
     }
     choices();
   }
 
   var MENU_KINDS = [
-    { kind: 'device', text: 'Add device', icon: 'server' },
-    { kind: 'rack', text: 'Add rack', icon: 'server-network' },
-    { kind: 'map', text: 'Link to a map', icon: 'map-marker-path' },
-    { kind: 'label', text: 'Add label', icon: 'label-outline' },
+    { kind: 'device', text: t('Add device'), search: t('Search devices'), icon: 'server' },
+    { kind: 'rack', text: t('Add rack'), search: t('Search racks'), icon: 'server-network' },
+    { kind: 'map', text: t('Link to a map'), search: t('Search maps'), icon: 'map-marker-path' },
+    { kind: 'label', text: t('Add label'), icon: 'label-outline' },
   ];
 
   function startContextMenu(state) {
@@ -2823,7 +2853,8 @@
 
     function labelForm(point) {
       menu.innerHTML = '<form class="d-flex gap-1"><input type="text" class="form-control form-control-sm" ' +
-        'placeholder="Label" maxlength="100" required><button class="btn btn-sm btn-primary">Add</button></form>';
+        'placeholder="' + escapeHtml(t('Label')) + '" maxlength="100" required><button class="btn btn-sm btn-primary">' +
+        escapeHtml(t('Add')) + '</button></form>';
       var form = menu.querySelector('form');
       form.querySelector('input').focus();
       form.addEventListener('submit', function (event) {

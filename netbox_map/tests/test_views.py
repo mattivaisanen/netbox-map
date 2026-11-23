@@ -1,16 +1,20 @@
+import re
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.contenttypes.models import ContentType
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from dcim.models import CableBundle, Device, Rack
 from netbox.plugins import get_plugin_config
 
-from dcim.models import CableBundle, Device, Rack
-
-from ..models import Map, MapMarker, MapShape
+from ..models import Map, MapMarker, MapOverlay, MapShape
+from ..strings import TEXTS
+from ..tables import MapOverlayTable
 from .utils import make_device, make_map, make_site, make_user
 
 
@@ -46,14 +50,54 @@ class APITests(TestCase):
         self.client.force_authenticate(self.user)
 
     def test_create_map_and_marker(self):
-        response = self.client.post('/api/plugins/maps/maps/', {'name': 'Yard'}, format='json')
+        response = self.client.post('/api/plugins/map/maps/', {'name': 'Yard'}, format='json')
         self.assertEqual(response.status_code, 201, response.content)
         device = make_device()
-        response = self.client.post('/api/plugins/maps/markers/', {
+        response = self.client.post('/api/plugins/map/markers/', {
             'map': response.json()['id'], 'object_type': 'dcim.device', 'object_id': device.pk, 'x': 5, 'y': 6,
         }, format='json')
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()['object']['name'], device.name)
+
+    def test_marker_object_type_limited(self):
+        map_ = make_map()
+        response = self.client.post('/api/plugins/map/markers/', {
+            'map': map_.pk, 'object_type': 'netbox_map.mapshape', 'object_id': 1, 'x': 0, 'y': 0,
+        }, format='json')
+        self.assertEqual(response.status_code, 400, response.content)
+
+
+class ScriptTextTests(TestCase):
+    def test_every_script_text_can_be_translated(self):
+        assets = Path(__file__).resolve().parent.parent / 'assets'
+        for name in ('map.js', 'export.js'):
+            # Join texts split over lines ('a ' +\n 'b') first.
+            script = re.sub(r"'\s*\+\s*\n\s*'", '', (assets / name).read_text())
+            for text in re.findall(r"\bt\((?:[^'()]*\? )?'((?:[^'\\]|\\.)*)'", script):
+                with self.subTest(script=name, text=text):
+                    self.assertIn(text, TEXTS)
+
+
+class OverlayImageTests(TestCase):
+    def test_served_sandboxed_to_users_who_may_see_it(self):
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg" width="4" height="3"/>'
+        overlay = MapOverlay(map=make_map(), name='Plan', image=SimpleUploadedFile('plan.svg', svg))
+        overlay.full_clean()
+        overlay.save()
+        self.client.force_login(make_user('viewer', is_superuser=True))
+        response = self.client.get(overlay.image_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'image/svg+xml')
+        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
+        self.assertIn('sandbox', response['Content-Security-Policy'])
+        self.assertEqual(b''.join(response.streaming_content), svg)
+        # Pages link the view, not the media file.
+        table = MapOverlayTable(MapOverlay.objects.all())
+        self.assertIn(overlay.image_url, table.rows[0].get_cell('image'))
+        self.assertContains(self.client.get(overlay.map.get_absolute_url()), overlay.image_url)
+
+        self.client.force_login(make_user('nobody'))
+        self.assertEqual(self.client.get(overlay.image_url).status_code, 404)
 
 
 class MapViewTests(TestCase):
@@ -91,6 +135,13 @@ class MapViewTests(TestCase):
         make_map('Site C plan', scope_type=ContentType.objects.get_for_model(site), scope_id=site.pk)
         self.assertContains(self.client.get(site.get_absolute_url()), 'Site C plan')
 
+    @override_settings(LOGIN_REQUIRED=False, EXEMPT_VIEW_PERMISSIONS=['*'])
+    def test_hover_card_for_anonymous_viewers_when_login_is_not_required(self):
+        marker = MapMarker.objects.create(map=make_map(), object=make_device(), x=1, y=2)
+        self.client.logout()
+        response = self.client.get(reverse('plugins:netbox_map:marker_card', args=[marker.pk]))
+        self.assertEqual(response.status_code, 200)
+
     def test_hover_card(self):
         device = make_device()
         rack = Rack.objects.create(name='R9', site=device.site)
@@ -98,7 +149,10 @@ class MapViewTests(TestCase):
         device_marker = MapMarker.objects.create(map=map_, object=device, x=1, y=2)
         rack_marker = MapMarker.objects.create(map=map_, object=rack, x=3, y=4)
         label = MapMarker.objects.create(map=map_, label='Door', x=5, y=6)
-        card = lambda marker: self.client.get(reverse('plugins:netbox_map:marker_card', args=[marker.pk]))
+
+        def card(marker):
+            return self.client.get(reverse('plugins:netbox_map:marker_card', args=[marker.pk]))
+
         # Built-in fields: status as a badge, related objects by name.
         response = card(device_marker)
         self.assertContains(response, 'text-bg-green')
@@ -106,7 +160,8 @@ class MapViewTests(TestCase):
         self.assertNotContains(response, 'nbm-elevation')
         # Racks show their elevation and are drawn square.
         self.assertContains(card(rack_marker), 'nbm-elevation')
-        self.assertTrue(self.client.get(reverse('plugins:netbox_map:marker_data', args=[rack_marker.pk])).json()['square'])
+        data = self.client.get(reverse('plugins:netbox_map:marker_data', args=[rack_marker.pk])).json()
+        self.assertTrue(data['square'])
         # Configured fields; a name the object doesn't have is left out.
         config = {'netbox_map': {'hover_fields': {'dcim.device': ['serial', 'device_type.manufacturer', 'nonsense']}}}
         with self.settings(PLUGINS_CONFIG=config):
@@ -167,7 +222,9 @@ class MapViewTests(TestCase):
         device = make_device()
         marker = MapMarker.objects.create(map=make_map(), object=device, x=1, y=2)
         data = self.client.get(reverse('plugins:netbox_map:marker_data', args=[marker.pk])).json()
-        self.assertEqual((data['label'], data['object'], data['status']), (device.name, f'dcim.device:{device.pk}', 'green'))
+        self.assertEqual(
+            (data['label'], data['object'], data['status']), (device.name, f'dcim.device:{device.pk}', 'green'),
+        )
 
     def test_device_health_dot(self):
         device = make_device()

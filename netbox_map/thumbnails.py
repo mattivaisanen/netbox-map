@@ -80,7 +80,7 @@ def grid_data(maps, user):
 
     for overlay in MapOverlay.objects.restrict(user, 'view').filter(map_id__in=ids).order_by('weight', 'pk'):
         entries[overlay.map_id]['overlays'].append({
-            'url': overlay.image.url,
+            'url': overlay.image_url,
             'opacity': overlay.opacity,
             'weight': overlay.weight,
             'width': overlay.image_width,

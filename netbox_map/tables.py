@@ -32,7 +32,7 @@ class MapOverlayTable(NetBoxTable):
     name = tables.Column(linkify=True, verbose_name=_('Name'))
     map = tables.Column(linkify=True, verbose_name=_('Map'))
     image = tables.TemplateColumn(
-        template_code='<a href="{{ record.image.url }}">{{ record.image.name }}</a>', orderable=False,
+        template_code='<a href="{{ record.image_url }}">{{ record.image.name }}</a>', orderable=False,
         verbose_name=_('File'),
     )
     size = tables.TemplateColumn(

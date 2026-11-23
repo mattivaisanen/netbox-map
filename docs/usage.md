@@ -220,7 +220,7 @@ Everything on a map uses the same x/y numbers:
 
 ## REST API
 
-Everything is available under `/api/plugins/maps/`: `maps/`, `overlays/`,
+Everything is available under `/api/plugins/map/`: `maps/`, `overlays/`,
 `markers/` and `shapes/`. Overlay images are uploaded as
 `multipart/form-data`. A marker's object is given as `object_type` (such as
 `dcim.rack`) and `object_id`.

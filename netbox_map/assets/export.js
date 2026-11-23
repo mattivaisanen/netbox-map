@@ -17,6 +17,19 @@
 (function () {
   'use strict';
 
+  // Text shown to users. Django translates it (strings.py) and the page
+  // passes it in the "nbm-strings" element; English is used for anything
+  // missing. {name} in a text is replaced from `values`.
+  var STRINGS = (function () {
+    var element = document.getElementById('nbm-strings');
+    try { return element ? JSON.parse(element.textContent) : {}; } catch (error) { return {}; }
+  }());
+  function t(text, values) {
+    var out = STRINGS[text] || text;
+    Object.keys(values || {}).forEach(function (key) { out = out.split('{' + key + '}').join(values[key]); });
+    return out;
+  }
+
   // PNG and PDF have this many pixels per screen pixel, for sharp prints.
   var SCALE = 2;
   // A PDF page measures 72 points per inch, a screen 96 pixels.
@@ -162,7 +175,7 @@
     return new Promise(function (resolve, reject) {
       var image = new Image();
       image.onload = function () { resolve(image); };
-      image.onerror = function () { reject(new Error('The picture could not be drawn.')); };
+      image.onerror = function () { reject(new Error(t('The picture could not be drawn.'))); };
       image.src = src;
     });
   }
@@ -493,7 +506,7 @@
 
   function canvasBlob(canvas, type) {
     return new Promise(function (resolve, reject) {
-      canvas.toBlob(function (blob) { return blob ? resolve(blob) : reject(new Error('The picture is too large.')); }, type);
+      canvas.toBlob(function (blob) { return blob ? resolve(blob) : reject(new Error(t('The picture is too large.'))); }, type);
     });
   }
 
@@ -608,9 +621,9 @@
   }
 
   var FORMATS = [
-    ['png', 'PNG image', 'mdi-file-image-outline'],
-    ['svg', 'SVG drawing', 'mdi-svg'],
-    ['pdf', 'PDF document', 'mdi-file-pdf-box'],
+    ['png', t('PNG image'), 'mdi-file-image-outline'],
+    ['svg', t('SVG drawing'), 'mdi-svg'],
+    ['pdf', t('PDF document'), 'mdi-file-pdf-box'],
   ];
 
   // A button under the others on the map's left, with a menu of the three kinds of file.
@@ -621,7 +634,7 @@
         var bar = L.DomUtil.create('div', 'leaflet-bar nbm-export');
         var button = L.DomUtil.create('a', 'nbm-export-button', bar);
         button.href = '#';
-        button.title = 'Save the map as a file';
+        button.title = t('Save the map as a file');
         button.setAttribute('role', 'button');
         button.setAttribute('aria-label', button.title);
         button.setAttribute('aria-haspopup', 'menu');
@@ -656,10 +669,10 @@
           button.innerHTML = '<i class="mdi mdi-loading mdi-spin"></i>';
           exportMap(map, name, item.dataset.format).then(function (missing) {
             if (missing) {
-              window.alert(missing + ' background pictures could not be read from their server and are missing from the file.');
+              window.alert(t('{count} background pictures could not be read from their server and are missing from the file.', { count: missing }));
             }
           }).catch(function (error) {
-            window.alert('Saving the map failed: ' + error.message);
+            window.alert(t('Saving the map failed: {error}', { error: error.message }));
           }).finally(function () {
             bar.classList.remove('nbm-busy');
             button.innerHTML = '<i class="mdi mdi-download"></i>';

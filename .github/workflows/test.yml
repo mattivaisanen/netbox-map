@@ -1,16 +1,29 @@
 name: Test
 
-# Runs on pull requests, or by hand from the Actions tab.
+# Runs on pull requests that change code, or by hand from the Actions tab.
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
+
+# A new push to a pull request cancels its run still going.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported release and the latest tested one.
+        netbox: [v4.7.0, v4.7.5]
     env:
-      # Oldest supported release.
-      NETBOX_REF: v4.7.0
+      NETBOX_REF: ${{ matrix.netbox }}
 
     services:
       postgres:

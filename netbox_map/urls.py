@@ -2,11 +2,14 @@ from django.urls import include, path
 
 from utilities.urls import get_model_urls
 
-from . import assets
-from . import views  # Also registers the views get_model_urls() finds
+from . import (
+    assets,
+    views,  # Also registers the views get_model_urls() finds
+)
 
 urlpatterns = [
     path('assets/<str:name>', assets.asset, name='asset'),
+    path('overlays/<int:pk>/image/', views.OverlayImageView.as_view(), name='mapoverlay_image'),
     path('markers/<int:pk>/data/', views.MarkerDataView.as_view(), name='marker_data'),
     path('markers/<int:pk>/card/', views.MarkerCardView.as_view(), name='marker_card'),
     path('shapes/<int:pk>/card/', views.ShapeCardView.as_view(), name='shape_card'),
