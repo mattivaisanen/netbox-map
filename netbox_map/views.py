@@ -2,7 +2,7 @@ import logging
 import mimetypes
 import os
 
-from django.db.models import Count, Prefetch
+from django.db.models import Count
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -15,6 +15,7 @@ from netbox.views import generic
 from utilities.views import ConditionalLoginRequiredMixin, register_model_view
 
 from . import cards, filtersets, forms, tables, thumbnails, viewer
+from .choices import BaseLayerChoices
 from .models import Map, MapMarker, MapOverlay, MapShape
 
 logger = logging.getLogger(__name__)
@@ -56,20 +57,23 @@ class MapListView(generic.ObjectListView):
         maps = (
             self.queryset.restrict(user, 'view')
             .annotate(marker_count=Count('markers', distinct=True), shape_count=Count('shapes', distinct=True))
-            .prefetch_related(Prefetch('overlays', queryset=MapOverlay.objects.order_by('weight', 'pk')), 'scope')
+            .prefetch_related('scope')
         )
         maps = list(maps[:self.GRID_LIMIT + 1])
         more_maps = len(maps) > self.GRID_LIMIT
         maps = maps[:self.GRID_LIMIT]
-        # Pictures of world maps, from the first tile background.
-        layer = thumbnails.add_thumbnails(maps)
+        # What map.js needs to draw each card's picture of its start view.
+        thumbnail_data = thumbnails.grid_data(maps, user)
+        backgrounds = thumbnail_data['backgrounds']
         return {
             'view': 'grid',
             'maps': maps,
             'more_maps': more_maps,
+            'thumbnail_data': thumbnail_data,
             # Credit for the tiles in the pictures, shown once under the grid.
-            'thumbnail_attribution': layer['attribution'] if layer and any(
-                getattr(m, 'thumbnail', None) for m in maps
+            # map.js swaps it for the background the user last picked.
+            'thumbnail_attribution': backgrounds[0]['attribution'] if backgrounds and any(
+                m.base_layer == BaseLayerChoices.WORLD for m in maps
             ) else '',
         }
 

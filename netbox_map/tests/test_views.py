@@ -201,16 +201,22 @@ class MapViewTests(TestCase):
         response = self.client.get(reverse('plugins:netbox_map:map_list') + '?view=list')
         self.assertNotContains(response, 'nbm-map-card')
 
-    def test_world_maps_get_a_picture_in_the_grid(self):
-        map_ = make_map(name='Harbour')
-        MapMarker.objects.create(map=map_, label='Quay', x=24.95, y=60.16)
-        MapMarker.objects.create(map=map_, label='Gate', x=24.96, y=60.17)
-        make_map(name='Floor', base_layer='image')
+    def test_grid_pictures_show_the_start_view_with_areas_only(self):
+        map_ = make_map(name='Harbour', rotation=30)
+        MapMarker.objects.create(map=map_, label='Quay', x=24.90, y=60.10)
+        MapShape.objects.create(map=map_, kind='area', points=[[24.95, 60.15], [24.96, 60.15], [24.96, 60.16]])
+        MapShape.objects.create(map=map_, kind='line', points=[[24.95, 60.15], [25.00, 60.20]])
         response = self.client.get(reverse('plugins:netbox_map:map_list') + '?view=grid')
-        # Tiles of the first tile background (the vector one is skipped), zoomed in on the markers.
-        self.assertContains(response, 'class="nbm-thumb-picture"', count=1)
-        self.assertContains(response, 'https://tile.openstreetmap.org/12/')
-        self.assertContains(response, 'nbm-thumb-credit')
+        self.assertContains(response, f'data-nbm-thumb="{map_.pk}"')
+        data = response.context['thumbnail_data']
+        picture = data['maps'][map_.pk]
+        # Turned like the map; the area is drawn, the marker and line only widen the view.
+        self.assertEqual(picture['rotation'], 30)
+        self.assertEqual([shape['kind'] for shape in picture['shapes']], ['area'])
+        self.assertEqual(picture['extent'], [[60.10, 24.90], [60.20, 25.00]])
+        # Only tile backgrounds: the vector one needs WebGL.
+        self.assertTrue(data['backgrounds'])
+        self.assertTrue(all(layer.get('url') for layer in data['backgrounds']))
 
     def test_marker_data_for_the_editor(self):
         device = make_device()

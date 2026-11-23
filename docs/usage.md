@@ -111,9 +111,11 @@ Esc cancels the current tool.
 
 The maps page lists all maps as a table, or as a grid of cards with a
 picture of each map (**List** and **Grid** at the top). NetBox remembers
-each user's choice. A world map's picture shows its start view, or
-everything on it, on the first tile background with its images on top;
-an image-only map shows its first image.
+each user's choice. Each picture shows the map as it opens: the same
+place, zoom and turn, with its background, images, areas and circles.
+Markers, lines, cables and labels are left out. The background is the one
+you last picked on a map, or the first; vector backgrounds such as Simple
+are not used in pictures, so those show the first tile background.
 
 A map has a name and a **base layer**:
 

@@ -189,16 +189,20 @@ out). The page embeds it with `json_script` and calls
 - **Maps page:** `MapListView` renders NetBox's table or, with `?view=grid`,
   cards (`inc/map_card.html`) of the filtered maps. The choice is kept in
   the user's NetBox preferences (`plugins.netbox_map.maps_view`).
-- **Map pictures in the grid** (`thumbnails.py`): a world map's card shows
-  plain `<img>` tiles placed by the server, so no map library runs on the
-  maps page and NetBox fetches nothing itself. The view is the map's start
-  view (two zoom levels out) or the bounds of its markers, shape points and
-  placed images, projected to Web Mercator by hand and fitted at a whole
-  zoom level. Tiles come from the first `base_layers` entry with a `url`
-  (vector styles would need WebGL per card); the url is filled like
-  Leaflet's (`{s}`, `{-y}`, `tms`, other option keys). Cost: two queries
-  for all cards (marker min/max, shape points). Pictures are north up,
-  without layer offsets.
+- **Map pictures in the grid** (`thumbnails.py`, `thumbnails()` in
+  map.js): each card is a small Leaflet map drawn with the same helpers as
+  the map page (`backgroundLayer`, `overlayLayer`, `areaLayer`, the turned
+  CRS), so rotation, layer offsets, circles and image-only maps match the
+  page exactly. Only images, areas and circles are drawn; markers, lines
+  and junctions are sent as one `extent` box, since the page's fit still
+  counts them. The start zoom is lowered by log2 of card size / page map
+  size (`mapPageSize()`, mirrors `.nbm-map` and `.nbm-sidebar`), with
+  `zoomSnap: 0`, so the card shows the same stretch of map as the page.
+  Cards are drawn when they scroll into view (IntersectionObserver) and
+  take no input; the card's link gets the clicks. Backgrounds are the
+  `base_layers` with a tile `url` only: a MapLibre map per card would run
+  out of WebGL contexts. Cost: three queries for all cards (marker min/max,
+  overlays, shapes), each restricted to what the user may view.
 
 ## Side panel
 

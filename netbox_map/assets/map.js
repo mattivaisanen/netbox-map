@@ -1520,6 +1520,173 @@
     if (state.onBaseLayer) { state.onBaseLayer(); }
   }
 
+  // One background layer from base_layers: plain tiles, or a vector style
+  // (MapLibre). NetBox (Django) tells browsers to send no Referer to other
+  // sites, and OpenStreetMap's tile servers refuse requests without one, so
+  // tile requests send just NetBox's address (no page path).
+  function backgroundLayer(layer, data, maxZoom, rotation) {
+    var tileOptions = L.Util.extend({}, layer, {
+      maxNativeZoom: layer.max_zoom,
+      maxZoom: maxZoom,
+      referrerPolicy: 'strict-origin-when-cross-origin',
+    });
+    delete tileOptions.name;
+    delete tileOptions.url;
+    delete tileOptions.max_zoom;
+    var tiles = layer.style
+      ? new VectorLayer(L.Util.extend(tileOptions, { rotation: rotation }))
+      : new (rotation ? TurnedTileLayer : MapTileLayer)(layer.url, tileOptions);
+    tiles.nbmOffset = (data.layer_offsets || {})[layer.name] || null;
+    return tiles;
+  }
+
+  // An overlay image, or null when it has no place yet. On an image-only map
+  // an overlay that isn't placed sits at its own pixel size from the
+  // bottom-left corner.
+  function overlayLayer(overlay, data, rotation) {
+    var corners = overlay.bounds;
+    if (!corners && data.image_only) { corners = [[0, 0], [overlay.height || 1000, overlay.width || 1000]]; }
+    if (!corners) { return null; }
+    return new (rotation ? TurnedImageOverlay : L.ImageOverlay)(overlay.url, corners, {
+      opacity: overlay.opacity / 100, zIndex: overlay.weight, interactive: false,
+    });
+  }
+
+  // An area (polygon) or circle shape.
+  function areaLayer(shape, style, rotation) {
+    var points = shape.points.map(function (p) { return toLatLng(p[0], p[1]); });
+    if (shape.kind === 'circle') {
+      return new (rotation ? TurnedCircle : L.Circle)(points[0], Object.assign({ radius: shape.radius }, style));
+    }
+    return L.polygon(points, style);
+  }
+
+  // A circle's bounds. They need the map's view, which isn't set while the
+  // map is being drawn, so they are worked out from the radius here.
+  function circleBounds(shape, data) {
+    var center = toLatLng(shape.points[0][0], shape.points[0][1]);
+    return data.image_only
+      ? L.latLngBounds([center.lat - shape.radius, center.lng - shape.radius],
+                       [center.lat + shape.radius, center.lng + shape.radius])
+      : center.toBounds(shape.radius * 2);
+  }
+
+  //
+  // Pictures of maps in the maps grid.
+  //
+
+  // The size of the map on a map's own page (see .nbm-map and .nbm-sidebar
+  // in map.css) when it would be opened in this window. `width` is the
+  // width of the page's content, the same on both pages.
+  function mapPageSize(width) {
+    var rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+    var wide = window.innerWidth > 768;
+    return L.point(wide ? width - 18 * rem : width, Math.max(420, window.innerHeight - 260));
+  }
+
+  // A still picture of one map's start view, as the map's page opens it:
+  // the same middle, zoom, turn, background, images, areas and circles.
+  // Markers, lines, junctions, labels and controls are left out, and
+  // nothing reacts to the mouse (the card's link takes the clicks).
+  // `pageWidth` is the width of the page's content.
+  function renderThumbnail(element, data, background, pageWidth) {
+    var rotation = ((data.rotation || 0) % 360 + 360) % 360;
+    var mapOptions = {
+      // Any zoom, so the picture holds just what the page shows.
+      zoomSnap: 0, zoomControl: false, attributionControl: false,
+      dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false,
+      boxZoom: false, keyboard: false, fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false,
+    };
+    if (data.image_only) {
+      mapOptions.crs = L.CRS.Simple;
+      mapOptions.minZoom = -10;
+      mapOptions.maxZoom = 8;
+    } else {
+      mapOptions.maxZoom = Math.max(MAX_ZOOM, background ? background.max_zoom || 0 : 0);
+    }
+    if (rotation) { mapOptions.crs = turnedCrs(mapOptions.crs || L.CRS.EPSG3857, rotation); }
+    var map = L.map(element, mapOptions);
+    if (rotation) { map.getBoundsZoom = getBoundsZoom; }
+    map.createPane('nbmAreas').style.zIndex = 410;
+
+    if (background && !data.image_only) { backgroundLayer(background, data, mapOptions.maxZoom, rotation).addTo(map); }
+    // Everything the map's page fits its view to: what is drawn here, and
+    // the extent of what isn't (markers, lines, junctions), from the server.
+    var bounds = L.latLngBounds([]);
+    if (data.extent) { bounds.extend(data.extent); }
+    data.overlays.slice().sort(function (a, b) { return a.weight - b.weight; }).forEach(function (overlay) {
+      var layer = overlayLayer(overlay, data, rotation);
+      if (layer) { bounds.extend(layer.addTo(map).getBounds()); }
+    });
+    // Lower levels first, as on the map.
+    data.shapes.slice().sort(function (a, b) { return (a.level || 0) - (b.level || 0); }).forEach(function (shape) {
+      if (shape.kind !== 'area' && shape.kind !== 'circle') { return; }
+      var style = { color: shapeColor(shape), weight: 2, fillOpacity: 0.2, pane: 'nbmAreas', interactive: false };
+      var layer = areaLayer(shape, style, rotation).addTo(map);
+      bounds.extend(shape.kind === 'circle' ? circleBounds(shape, data) : layer.getBounds());
+    });
+
+    // The page's start view, scaled down from the page's map to this card
+    // so the card shows the same stretch of map.
+    var page = mapPageSize(pageWidth);
+    var card = map.getSize();
+    var scale = Math.min(card.x / page.x, card.y / page.y);
+    if (data.default_view) {
+      map.setView(toLatLng(data.default_view.x, data.default_view.y), data.default_view.zoom + Math.log2(scale));
+    } else if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [30 * scale, 30 * scale] });
+    } else if (data.image_only) {
+      map.setView([0, 0], Math.log2(scale));
+    } else {
+      map.setView([20, 0], 2 + Math.log2(scale));
+    }
+    return map;
+  }
+
+  // Draws the pictures in the maps grid. `data` is thumbnails.grid_data():
+  // the backgrounds and one entry per map, keyed by the cards'
+  // data-nbm-thumb. Each picture is drawn once its card scrolls into view.
+  function thumbnails(container, data) {
+    // The background the user last picked on a map, else the first one, so
+    // the pictures look like the maps open.
+    defaultColors = data.default_colors || {};
+    var layers = data.backgrounds || [];
+    var saved = remembered('base-layer');
+    var background = layers.filter(function (l) { return l.name === saved; })[0] || layers[0] || null;
+    var credit = container.querySelector('.nbm-thumb-credit');
+    if (credit) {
+      if (background && background.attribution) { credit.querySelector('span').innerHTML = background.attribution; }
+      credit.hidden = !background;
+    }
+    var row = container.querySelector('.row') || container;
+
+    function draw(element) {
+      var map = data.maps[element.getAttribute('data-nbm-thumb')];
+      if (!map) { return; }
+      var picture = document.createElement('div');
+      picture.className = 'nbm-thumb-map';
+      element.appendChild(picture);
+      try {
+        renderThumbnail(picture, map, background, row.clientWidth);
+        element.classList.add('nbm-thumb-drawn');
+      } catch (error) {
+        // A broken map keeps its icon; the others are still drawn.
+        element.removeChild(picture);
+        if (window.console) { window.console.warn('Map picture failed:', error); }
+      }
+    }
+    var cards = Array.prototype.slice.call(container.querySelectorAll('[data-nbm-thumb]'));
+    if (!('IntersectionObserver' in window)) { cards.forEach(draw); return; }
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) { return; }
+        observer.unobserve(entry.target);
+        draw(entry.target);
+      });
+    }, { rootMargin: '200px' });
+    cards.forEach(function (card) { observer.observe(card); });
+  }
+
   function render(element, data, options) {
     options = options || {};
     var edit = !!options.edit;
@@ -1550,22 +1717,7 @@
     // last choice is remembered in the browser.
     var baseLayers = {};
     layers.forEach(function (layer) {
-      // NetBox (Django) tells browsers to send no Referer to other sites, and
-      // OpenStreetMap's tile servers refuse requests without one. Send just
-      // NetBox's address (no page path) with tile requests.
-      var tileOptions = L.Util.extend({}, layer, {
-        maxNativeZoom: layer.max_zoom,
-        maxZoom: mapOptions.maxZoom,
-        referrerPolicy: 'strict-origin-when-cross-origin',
-      });
-      delete tileOptions.name;
-      delete tileOptions.url;
-      delete tileOptions.max_zoom;
-      var tiles = layer.style
-        ? new VectorLayer(L.Util.extend(tileOptions, { rotation: rotation }))
-        : new (rotation ? TurnedTileLayer : MapTileLayer)(layer.url, tileOptions);
-      tiles.nbmOffset = (data.layer_offsets || {})[layer.name] || null;
-      baseLayers[layer.name] = tiles;
+      baseLayers[layer.name] = backgroundLayer(layer, data, mapOptions.maxZoom, rotation);
     });
 
     // Layers of drawing, bottom up: images (Leaflet's overlay pane), areas
@@ -1592,12 +1744,9 @@
     // Overlays, lowest weight first. On an image-only map an overlay that
     // isn't placed yet sits at its own pixel size from the bottom-left corner.
     data.overlays.slice().sort(function (a, b) { return a.weight - b.weight; }).forEach(function (overlay) {
-      var corners = overlay.bounds;
-      if (!corners && data.image_only) { corners = [[0, 0], [overlay.height || 1000, overlay.width || 1000]]; }
-      if (!corners) { return; }
-      var layer = new (rotation ? TurnedImageOverlay : L.ImageOverlay)(overlay.url, corners, {
-        opacity: overlay.opacity / 100, zIndex: overlay.weight, interactive: false,
-      }).addTo(map);
+      var layer = overlayLayer(overlay, data, rotation);
+      if (!layer) { return; }
+      layer.addTo(map);
       state.overlays[overlay.id] = { data: overlay, layer: layer };
       bounds.extend(layer.getBounds());
     });
@@ -1609,10 +1758,8 @@
       };
       var points = shape.points.map(function (p) { return toLatLng(p[0], p[1]); });
       var layer;
-      if (shape.kind === 'circle') {
-        layer = new (rotation ? TurnedCircle : L.Circle)(points[0], Object.assign({ radius: shape.radius }, style));
-      } else if (shape.kind === 'area') {
-        layer = L.polygon(points, style);
+      if (shape.kind === 'circle' || shape.kind === 'area') {
+        layer = areaLayer(shape, style, rotation);
       } else if (shape.kind === 'junction') {
         // A ring that lines run through; sizeJunctions() sets its size.
         layer = L.circleMarker(points[0], {
@@ -1648,10 +1795,7 @@
       if (shape.kind === 'junction') {
         bounds.extend(points[0]);
       } else if (shape.kind === 'circle') {
-        bounds.extend(data.image_only
-          ? L.latLngBounds([points[0].lat - shape.radius, points[0].lng - shape.radius],
-                           [points[0].lat + shape.radius, points[0].lng + shape.radius])
-          : points[0].toBounds(shape.radius * 2));
+        bounds.extend(circleBounds(shape, data));
       } else {
         bounds.extend(layer.getBounds());
       }
@@ -2747,5 +2891,5 @@
     document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { close(); } });
   }
 
-  window.NetBoxMap = { render: render };
+  window.NetBoxMap = { render: render, thumbnails: thumbnails };
 })();

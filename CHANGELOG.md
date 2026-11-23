@@ -8,9 +8,11 @@ New:
   from how old a value on the device is (a number such as minutes since
   last contact, or a date and time). Pick the field, unit, limits and
   colors with the `device_health` setting. Off by default.
-- Fixed: world maps had no picture in the maps grid, only an icon. They
-  now show a small map of their start view, or of everything on them,
-  with their images on top.
+- Fixed: world maps had no picture in the maps grid, only an icon. Every
+  map's picture now shows exactly how the map opens: the same place, zoom
+  and turn, with its background, images, areas and circles, but without
+  markers, cables, lines or labels. Image-only maps show their whole start
+  view too, not just their first image.
 - Save a map as a PNG, SVG or PDF file with the download button under the
   zoom buttons. The file shows the map as it is on the screen.
 - Maps, with a world map or an image as the base layer. A map can sit under
